@@ -681,6 +681,14 @@
   .row-flex { display: flex; gap: 10px; }
   .row-flex > * { flex: 1; }
 
+  .local-pill {
+    display: inline-block; font-size: 10px; font-weight: 800;
+    padding: 2px 7px; border-radius: 100px;
+    background: var(--yellow-light); color: var(--yellow-dark);
+    text-transform: uppercase; letter-spacing: 0.3px;
+    vertical-align: middle; margin-left: 4px;
+  }
+
   @media (max-width: 360px) {
     .stat-num { font-size: 20px; }
     .header-title { font-size: 19px; }
@@ -700,35 +708,35 @@
       <p class="auth-sub" id="authSub">Sign in to sync your ledger everywhere</p>
 
       <!-- SIGN IN -->
-      <form id="signinForm" class="auth-form">
+      <form id="signinForm" class="auth-form" autocomplete="on">
         <div class="field">
           <label class="field-label">Phone number</label>
           <input type="tel" class="input" name="phone" placeholder="08012345678" inputmode="numeric" autocomplete="tel" required>
         </div>
         <div class="field">
           <label class="field-label">4-digit PIN</label>
-          <input type="tel" class="input pin-input" name="pin" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}" required>
+          <input type="tel" class="input pin-input" name="pin" placeholder="••••" inputmode="numeric" maxlength="4" autocomplete="current-password" required>
         </div>
         <button type="submit" class="btn btn-primary btn-block">Sign in</button>
       </form>
 
       <!-- SIGN UP -->
-      <form id="signupForm" class="auth-form" style="display: none;">
+      <form id="signupForm" class="auth-form" style="display: none;" autocomplete="on">
         <div class="field">
           <label class="field-label">Your name</label>
-          <input type="text" class="input" name="name" placeholder="e.g. Musa Ibrahim" required>
+          <input type="text" class="input" name="name" placeholder="e.g. Musa Ibrahim" autocomplete="name" required>
         </div>
         <div class="field">
           <label class="field-label">Phone number</label>
-          <input type="tel" class="input" name="phone" placeholder="08012345678" inputmode="numeric" required>
+          <input type="tel" class="input" name="phone" placeholder="08012345678" inputmode="numeric" autocomplete="tel" required>
         </div>
         <div class="field">
           <label class="field-label">Create 4-digit PIN</label>
-          <input type="tel" class="input pin-input" name="pin" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}" required>
+          <input type="tel" class="input pin-input" name="pin" placeholder="••••" inputmode="numeric" maxlength="4" autocomplete="new-password" required>
         </div>
         <div class="field">
           <label class="field-label">Confirm PIN</label>
-          <input type="tel" class="input pin-input" name="pin2" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}" required>
+          <input type="tel" class="input pin-input" name="pin2" placeholder="••••" inputmode="numeric" maxlength="4" autocomplete="new-password" required>
         </div>
         <button type="submit" class="btn btn-primary btn-block">Create account</button>
       </form>
@@ -757,11 +765,11 @@
         <div id="forgotStep3" style="display: none;">
           <div class="field">
             <label class="field-label">New 4-digit PIN</label>
-            <input type="tel" class="input pin-input" name="newPin" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}">
+            <input type="tel" class="input pin-input" name="newPin" placeholder="••••" inputmode="numeric" maxlength="4">
           </div>
           <div class="field">
             <label class="field-label">Confirm new PIN</label>
-            <input type="tel" class="input pin-input" name="newPin2" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}">
+            <input type="tel" class="input pin-input" name="newPin2" placeholder="••••" inputmode="numeric" maxlength="4">
           </div>
           <button type="submit" class="btn btn-primary btn-block">Reset PIN</button>
         </div>
@@ -848,7 +856,7 @@
 
 <script>
 /* ==========================================================================
-   AGENTPAL — Full Integrated App
+   AGENTPAL — Full Integrated App (corrected auth build)
    ========================================================================== */
 
 // ===== CONFIG =====
@@ -860,7 +868,7 @@ const SESSION_KEY = 'agentpal_session_v1';
 const QUEUE_KEY = 'agentpal_sync_queue_v1';
 const REMINDER_SETTINGS_KEY = 'agentpal_reminder_settings_v1';
 const AGENT_NAME_KEY = 'agentpal_agent_name';
-const PIN_KEY = 'agentpal_pin_v1';
+const LOCAL_ACCOUNTS_KEY = 'agentpal_local_accounts_v1';
 
 // ===== SUPABASE (optional) =====
 const CLOUD_CONFIGURED = !SUPABASE_URL.includes('PASTE_YOUR') && !SUPABASE_ANON_KEY.includes('PASTE_YOUR');
@@ -868,7 +876,7 @@ let supabase = null;
 if (CLOUD_CONFIGURED && window.supabase) {
   try {
     supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  } catch (e) { console.warn('Supabase init failed:', e); }
+  } catch (e) { console.warn('Supabase init failed:', e); supabase = null; }
 }
 
 // ===== STATE =====
@@ -879,15 +887,17 @@ let state = {
   currentTenantId: null,
 };
 
-let currentAgent = null;
-let useCloud = false;
+let currentAgent = null;          // { id, phone, name, local }
+let useCloud = false;             // true only for cloud-backed sessions
 let syncStatus = 'offline';
 let isOnline = navigator.onLine;
 let cachedBalance = null;
 let balanceFetchedAt = null;
 let otpPhone = '';
 let otpVerified = false;
+let otpMode = 'cloud';            // 'cloud' | 'local'
 let appInitialized = false;
+let booted = false;
 
 // ===== HELPERS =====
 const fmt = {
@@ -935,12 +945,87 @@ function prettyPhone(normalized) {
   return '0' + normalized.slice(3);
 }
 
+function isValidNgPhone(normalized) {
+  return /^234\d{10}$/.test(normalized);
+}
+
+// ===== CRYPTO (works on https, http AND file://) =====
+function utf8Bytes(str) {
+  const out = [];
+  for (let i = 0; i < str.length; i++) {
+    let c = str.charCodeAt(i);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) { out.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length) {
+      const c2 = str.charCodeAt(++i);
+      const cp = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00);
+      out.push(0xf0 | (cp >> 18), 0x80 | ((cp >> 12) & 63), 0x80 | ((cp >> 6) & 63), 0x80 | (cp & 63));
+    } else { out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
+  }
+  return out;
+}
+
+// Pure-JS SHA-256 — identical output to WebCrypto, but always available.
+function sha256Hex(str) {
+  const K = [
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+  ];
+  let H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+
+  const bytes = utf8Bytes(str);
+  const bitLen = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  const hi = Math.floor(bitLen / 0x100000000), lo = bitLen >>> 0;
+  bytes.push((hi >>> 24) & 0xff, (hi >>> 16) & 0xff, (hi >>> 8) & 0xff, hi & 0xff);
+  bytes.push((lo >>> 24) & 0xff, (lo >>> 16) & 0xff, (lo >>> 8) & 0xff, lo & 0xff);
+
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+
+  for (let i = 0; i < bytes.length; i += 64) {
+    const w = new Array(64);
+    for (let j = 0; j < 16; j++) {
+      w[j] = (bytes[i + j * 4] << 24) | (bytes[i + j * 4 + 1] << 16) | (bytes[i + j * 4 + 2] << 8) | bytes[i + j * 4 + 3];
+    }
+    for (let j = 16; j < 64; j++) {
+      const s0 = rotr(w[j - 15], 7) ^ rotr(w[j - 15], 18) ^ (w[j - 15] >>> 3);
+      const s1 = rotr(w[j - 2], 17) ^ rotr(w[j - 2], 19) ^ (w[j - 2] >>> 10);
+      w[j] = (w[j - 16] + s0 + w[j - 7] + s1) | 0;
+    }
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let j = 0; j < 64; j++) {
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K[j] + w[j]) | 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const t2 = (S0 + maj) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0;
+      d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H = [(H[0] + a) | 0, (H[1] + b) | 0, (H[2] + c) | 0, (H[3] + d) | 0,
+         (H[4] + e) | 0, (H[5] + f) | 0, (H[6] + g) | 0, (H[7] + h) | 0];
+  }
+  return H.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
 async function hashStr(str) {
+  const input = 'agentpal_v1_' + str;
+  // Prefer WebCrypto when available (https / localhost)
   try {
-    const data = new TextEncoder().encode('agentpal_v1_' + str);
-    const buf = await crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch { return ''; }
+    if (window.crypto && crypto.subtle && crypto.subtle.digest && window.TextEncoder) {
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch (e) { /* fall through to pure JS */ }
+  return sha256Hex(input);
 }
 
 // ===== STORAGE =====
@@ -964,6 +1049,196 @@ function getSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY
 function setSession(s) { if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s)); else localStorage.removeItem(SESSION_KEY); }
 function getReminderSettings() { try { return JSON.parse(localStorage.getItem(REMINDER_SETTINGS_KEY) || '{}'); } catch { return {}; } }
 function saveReminderSettings(s) { localStorage.setItem(REMINDER_SETTINGS_KEY, JSON.stringify(s)); }
+
+// Local (device-only) accounts — used when cloud is unavailable
+function getLocalAccounts() { try { return JSON.parse(localStorage.getItem(LOCAL_ACCOUNTS_KEY) || '{}'); } catch { return {}; } }
+function saveLocalAccounts(a) { localStorage.setItem(LOCAL_ACCOUNTS_KEY, JSON.stringify(a)); }
+
+// ===== DB ERROR TRANSLATION =====
+function friendlyDbError(err) {
+  const msg = (err && (err.message || err.error_description || err.hint || err.details)) || 'Unknown database error';
+  const code = err && err.code;
+  if (code === '42P01' || /relation .* does not exist|Could not find the table|schema cache/i.test(msg))
+    return 'Database table "agents" never exist. Run the setup SQL on your Supabase project first.';
+  if (code === '42501' || /row-level security|permission denied|RLS/i.test(msg))
+    return 'Supabase dey block access (RLS policy missing on "agents" table).';
+  if (/Invalid API key|No API key|JWT|Unauthorized/i.test(msg))
+    return 'Supabase API key no valid. Check your anon key.';
+  if (/Failed to fetch|NetworkError|Load failed|network error|timeout/i.test(msg))
+    return 'Network problem — check your internet connection.';
+  if (code === '23505' || /duplicate key/i.test(msg))
+    return 'This record already exists.';
+  return msg;
+}
+
+function makeDbError(err) {
+  const e = new Error(friendlyDbError(err));
+  const msg = (err && err.message) || '';
+  if ((err && err.code === '23505') || /duplicate key/i.test(msg)) e.isDuplicate = true;
+  e.raw = err;
+  return e;
+}
+
+async function findAgentByPhone(normalized) {
+  const { data, error } = await supabase
+    .from('agents')
+    .select('*')
+    .eq('phone', normalized)
+    .limit(1);
+  if (error) throw makeDbError(error);
+  return (data && data[0]) || null;
+}
+
+async function insertAgent(payload) {
+  const full = Object.assign({}, payload, { security_question: 'N/A', security_answer_hash: 'N/A' });
+  let res = await supabase.from('agents').insert(full).select().single();
+  // If optional columns don't exist, retry with the bare minimum
+  if (res.error && /column|schema|does not exist/i.test(res.error.message || '')) {
+    res = await supabase.from('agents').insert(payload).select().single();
+  }
+  if (res.error) throw makeDbError(res.error);
+  if (!res.data) throw new Error('Account created but server returned no data. Try signing in.');
+  return res.data;
+}
+
+// ===== AUTH =====
+function finishAuth(session, isCloud) {
+  session.local = !isCloud;
+  setSession(session);
+  currentAgent = session;
+  useCloud = !!isCloud;
+  if (session.name) localStorage.setItem(AGENT_NAME_KEY, session.name);
+  return session;
+}
+
+function createLocalAccount({ name, normalized, pin_hash }) {
+  const accounts = getLocalAccounts();
+  if (accounts[normalized]) throw new Error('This phone number already get account. Try sign in.');
+  accounts[normalized] = {
+    id: 'local_' + normalized,
+    phone: normalized,
+    name,
+    pin_hash,
+    createdAt: new Date().toISOString(),
+  };
+  saveLocalAccounts(accounts);
+  return finishAuth({ id: accounts[normalized].id, phone: normalized, name }, false);
+}
+
+async function doSignup({ name, phone, pin }) {
+  const normalized = normalizePhone(phone);
+  if (!isValidNgPhone(normalized)) throw new Error('Enter a valid phone number, e.g. 08012345678');
+  const trimmedName = String(name || '').trim();
+  if (!trimmedName) throw new Error('Enter your name');
+  const pin_hash = await hashStr(pin + '::' + normalized);
+
+  if (supabase) {
+    let cloudLookupOk = true;
+    let existing = null;
+    try {
+      existing = await findAgentByPhone(normalized);
+    } catch (e) {
+      cloudLookupOk = false;
+      console.warn('Cloud lookup failed:', e.message);
+    }
+
+    if (cloudLookupOk && existing) {
+      throw new Error('This phone number already get account. Please sign in instead.');
+    }
+
+    if (cloudLookupOk) {
+      try {
+        const data = await insertAgent({ phone: normalized, name: trimmedName, pin_hash });
+        return finishAuth({ id: data.id, phone: data.phone, name: data.name }, true);
+      } catch (e) {
+        if (e.isDuplicate) throw new Error('This phone number already get account. Please sign in instead.');
+        console.warn('Cloud signup failed, using local account:', e.message);
+        // fall through to local account
+      }
+    }
+  }
+
+  // Local fallback — guarantees account creation always works
+  return createLocalAccount({ name: trimmedName, normalized, pin_hash });
+}
+
+async function doSignin({ phone, pin }) {
+  const normalized = normalizePhone(phone);
+  if (!isValidNgPhone(normalized)) throw new Error('Enter a valid phone number, e.g. 08012345678');
+  const pin_hash = await hashStr(pin + '::' + normalized);
+
+  if (supabase) {
+    try {
+      const agent = await findAgentByPhone(normalized);
+      if (agent) {
+        if (!agent.pin_hash || agent.pin_hash !== pin_hash) {
+          throw new Error('Wrong PIN. Please try again.');
+        }
+        return finishAuth({ id: agent.id, phone: agent.phone, name: agent.name }, true);
+      }
+    } catch (e) {
+      if (/Wrong PIN/i.test(e.message)) throw e;
+      console.warn('Cloud signin failed, trying local:', e.message);
+    }
+  }
+
+  const accounts = getLocalAccounts();
+  const acc = accounts[normalized];
+  if (acc) {
+    if (acc.pin_hash !== pin_hash) throw new Error('Wrong PIN. Please try again.');
+    return finishAuth({ id: acc.id, phone: acc.phone, name: acc.name }, false);
+  }
+
+  throw new Error(supabase
+    ? 'No account found with this number. Create one first.'
+    : 'No account found on this device. Create one first.');
+}
+
+// ===== AGENCY =====
+async function createAgency(name) {
+  if (!currentAgent || !supabase || currentAgent.local) throw new Error('Sign in to a cloud account first');
+  const { data: rpcData } = await supabase.rpc('gen_invite_code');
+  const invite_code = rpcData || Math.random().toString(36).slice(2, 8).toUpperCase();
+  const { data, error } = await supabase.from('agencies').insert({
+    name: name.trim(), owner_id: currentAgent.id, invite_code,
+  }).select().single();
+  if (error) throw makeDbError(error);
+  await supabase.from('agents').update({ agency_id: data.id, role: 'owner' }).eq('id', currentAgent.id);
+  currentAgent.agency_id = data.id; currentAgent.role = 'owner';
+  setSession(currentAgent);
+  return data;
+}
+
+async function joinAgency(code) {
+  if (!currentAgent || !supabase || currentAgent.local) throw new Error('Sign in to a cloud account first');
+  const { data: agency, error } = await supabase.from('agencies').select('*').eq('invite_code', code.trim().toUpperCase()).maybeSingle();
+  if (error) throw makeDbError(error);
+  if (!agency) throw new Error('Invalid invite code');
+  await supabase.from('agents').update({ agency_id: agency.id, role: 'agent' }).eq('id', currentAgent.id);
+  currentAgent.agency_id = agency.id; currentAgent.role = 'agent';
+  setSession(currentAgent);
+  return agency;
+}
+
+async function leaveAgency() {
+  if (!currentAgent || !supabase) return;
+  if (currentAgent.role === 'owner') throw new Error('Owner no fit leave.');
+  await supabase.from('agents').update({ agency_id: null, role: 'solo' }).eq('id', currentAgent.id);
+  currentAgent.agency_id = null; currentAgent.role = 'solo';
+  setSession(currentAgent);
+}
+
+async function getAgencyMembers() {
+  if (!currentAgent?.agency_id || !supabase) return [];
+  const { data } = await supabase.from('agents').select('id, name, phone, role, created_at').eq('agency_id', currentAgent.agency_id).order('role', { ascending: true });
+  return data || [];
+}
+
+async function removeMember(agentId) {
+  if (currentAgent?.role !== 'owner' || !supabase) throw new Error('Only owner fit remove');
+  if (agentId === currentAgent.id) throw new Error('You no fit remove yourself');
+  await supabase.from('agents').update({ agency_id: null, role: 'solo' }).eq('id', agentId);
+}
 
 // ===== TENANT CALCS =====
 function getPaidTotal(t) { return (t.payments || []).reduce((s, p) => s + Number(p.amount || 0), 0); }
@@ -995,8 +1270,8 @@ function getAlertLevel(t) {
   if (balance <= 0 || !t.dueDate) return null;
   const settings = getReminderSettings();
   const daysBefore = settings.daysBefore || 14;
-  const now = new Date(); now.setHours(0,0,0,0);
-  const due = new Date(t.dueDate); due.setHours(0,0,0,0);
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const due = new Date(t.dueDate); due.setHours(0, 0, 0, 0);
   const days = Math.round((due - now) / 86400000);
 
   if (days < 0) {
@@ -1118,7 +1393,7 @@ function getUrgencyChip(t) {
 
 // ===== SMS CREDITS =====
 async function fetchBalance(force = false) {
-  if (!supabase || !useCloud || !currentAgent) return null;
+  if (!supabase || !useCloud || !currentAgent || currentAgent.local) return null;
   if (!force && cachedBalance !== null && balanceFetchedAt && (Date.now() - balanceFetchedAt) < 5 * 60 * 1000) return cachedBalance;
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/get-balance`, {
@@ -1135,7 +1410,7 @@ async function fetchBalance(force = false) {
 }
 
 function getBalanceStatus(balance) {
-  if (balance === null) return { level: 'unknown', color: 'var(--muted)', label: 'Unknown' };
+  if (balance === null || balance === undefined) return { level: 'unknown', color: 'var(--muted)', label: 'Unknown' };
   if (balance <= 0) return { level: 'empty', color: 'var(--red)', label: 'Empty' };
   if (balance < 20) return { level: 'low', color: 'var(--red)', label: 'Critical' };
   if (balance < 100) return { level: 'warning', color: '#f59e0b', label: 'Low' };
@@ -1144,7 +1419,7 @@ function getBalanceStatus(balance) {
 
 // ===== MESSAGE LOG =====
 async function loadMessageLog(limit = 50) {
-  if (!currentAgent || !supabase) return [];
+  if (!currentAgent || !supabase || currentAgent.local) return [];
   try {
     const { data } = await supabase.from('message_log').select('*').eq('agent_id', currentAgent.id).order('created_at', { ascending: false }).limit(limit);
     return data || [];
@@ -1152,83 +1427,6 @@ async function loadMessageLog(limit = 50) {
 }
 function statusIcon(s) { return s === 'delivered' ? '✅' : s === 'sent' ? '📤' : s === 'failed' || s === 'rejected' ? '❌' : '⏳'; }
 function statusLabel(s) { return { pending: 'Pending', sent: 'Sent', delivered: 'Delivered', failed: 'Failed', rejected: 'Rejected' }[s] || s; }
-
-// ===== AUTH =====
-async function doSignup({ name, phone, pin }) {
-  if (!supabase) throw new Error('Cloud not configured. Use guest mode.');
-  const normalized = normalizePhone(phone);
-  const { data: existing } = await supabase.from('agents').select('id').eq('phone', normalized).maybeSingle();
-  if (existing) throw new Error('This phone number don already get account. Try sign in.');
-  const pin_hash = await hashStr(pin + '::' + normalized);
-  const { data, error } = await supabase.from('agents').insert({
-    phone: normalized, name: name.trim(), pin_hash,
-    security_question: 'N/A', security_answer_hash: 'N/A',
-  }).select().single();
-  if (error) throw error;
-  const session = { id: data.id, phone: data.phone, name: data.name };
-  setSession(session); currentAgent = session; useCloud = true;
-  localStorage.setItem(AGENT_NAME_KEY, name.trim());
-  return data;
-}
-
-async function doSignin({ phone, pin }) {
-  if (!supabase) throw new Error('Cloud not configured');
-  const normalized = normalizePhone(phone);
-  const { data, error } = await supabase.from('agents').select('*').eq('phone', normalized).maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error('No account with this phone number.');
-  const pin_hash = await hashStr(pin + '::' + normalized);
-  if (data.pin_hash !== pin_hash) throw new Error('Wrong PIN. Try again.');
-  const session = { id: data.id, phone: data.phone, name: data.name };
-  setSession(session); currentAgent = session; useCloud = true;
-  if (data.name) localStorage.setItem(AGENT_NAME_KEY, data.name);
-  return data;
-}
-
-// ===== AGENCY =====
-async function createAgency(name) {
-  if (!currentAgent || !supabase) throw new Error('Sign in first');
-  const { data: rpcData } = await supabase.rpc('gen_invite_code');
-  const invite_code = rpcData || Math.random().toString(36).slice(2, 8).toUpperCase();
-  const { data, error } = await supabase.from('agencies').insert({
-    name: name.trim(), owner_id: currentAgent.id, invite_code,
-  }).select().single();
-  if (error) throw error;
-  await supabase.from('agents').update({ agency_id: data.id, role: 'owner' }).eq('id', currentAgent.id);
-  currentAgent.agency_id = data.id; currentAgent.role = 'owner';
-  setSession(currentAgent);
-  return data;
-}
-
-async function joinAgency(code) {
-  if (!currentAgent || !supabase) throw new Error('Sign in first');
-  const { data: agency } = await supabase.from('agencies').select('*').eq('invite_code', code.trim().toUpperCase()).maybeSingle();
-  if (!agency) throw new Error('Invalid invite code');
-  await supabase.from('agents').update({ agency_id: agency.id, role: 'agent' }).eq('id', currentAgent.id);
-  currentAgent.agency_id = agency.id; currentAgent.role = 'agent';
-  setSession(currentAgent);
-  return agency;
-}
-
-async function leaveAgency() {
-  if (!currentAgent || !supabase) return;
-  if (currentAgent.role === 'owner') throw new Error('Owner no fit leave.');
-  await supabase.from('agents').update({ agency_id: null, role: 'solo' }).eq('id', currentAgent.id);
-  currentAgent.agency_id = null; currentAgent.role = 'solo';
-  setSession(currentAgent);
-}
-
-async function getAgencyMembers() {
-  if (!currentAgent?.agency_id || !supabase) return [];
-  const { data } = await supabase.from('agents').select('id, name, phone, role, created_at').eq('agency_id', currentAgent.agency_id).order('role', { ascending: true });
-  return data || [];
-}
-
-async function removeMember(agentId) {
-  if (currentAgent?.role !== 'owner' || !supabase) throw new Error('Only owner fit remove');
-  if (agentId === currentAgent.id) throw new Error('You no fit remove yourself');
-  await supabase.from('agents').update({ agency_id: null, role: 'solo' }).eq('id', agentId);
-}
 
 // ===== OFFLINE QUEUE =====
 function getQueue() { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; } }
@@ -1241,7 +1439,7 @@ function enqueue(op) {
 }
 
 async function processQueue() {
-  if (!useCloud || !currentAgent || !isOnline || !supabase) return;
+  if (!useCloud || !currentAgent || !isOnline || !supabase || currentAgent.local) return;
   const q = getQueue();
   if (q.length === 0) { syncStatus = 'online'; updateSyncUI(); return; }
 
@@ -1280,7 +1478,7 @@ function updateQueueBadge() {
   const badge = document.getElementById('queueBadge');
   const btn = document.getElementById('queueBadgeBtn');
   if (!badge || !btn) return;
-  if (q.length > 0) {
+  if (q.length > 0 && useCloud) {
     badge.textContent = q.length > 99 ? '99+' : q.length;
     badge.style.display = 'flex';
     btn.style.display = 'flex';
@@ -1294,15 +1492,13 @@ function updateSyncUI() {
   const dot = document.getElementById('syncDot');
   if (dot) dot.className = 'sync-dot ' + syncStatus;
   const txt = document.getElementById('syncText');
-  if (txt) {
-    if (!useCloud) txt.textContent = 'Offline only';
-    else if (!currentAgent) txt.textContent = 'Not signed in';
-    else txt.textContent = currentAgent.name + ' · ' + prettyPhone(currentAgent.phone);
+  if (txt && currentAgent) {
+    txt.textContent = (currentAgent.local ? 'Local account · ' : '') + currentAgent.name + ' · ' + prettyPhone(currentAgent.phone);
   }
 }
 
 async function queueUpsertTenant(tenant) {
-  if (!useCloud || !currentAgent) return;
+  if (!useCloud || !currentAgent || currentAgent.local) return;
   const payload = {
     id: tenant.id, agent_id: currentAgent.id,
     agency_id: currentAgent.agency_id || null,
@@ -1331,12 +1527,12 @@ async function queueUpsertTenant(tenant) {
 }
 
 function queueDeleteTenant(tenantId) {
-  if (!useCloud || !currentAgent) return;
+  if (!useCloud || !currentAgent || currentAgent.local) return;
   enqueue({ type: 'delete_tenant', payload: { id: tenantId } });
 }
 
 async function loadTenants() {
-  if (!useCloud || !currentAgent || !supabase) return;
+  if (!useCloud || !currentAgent || !supabase || currentAgent.local) return;
   syncStatus = 'syncing'; updateSyncUI();
   try {
     let query = supabase.from('tenants').select('*');
@@ -1493,7 +1689,9 @@ function renderHome() {
     </div>
   `;
 
-  if (currentAgent?.agency_id) {
+  if (currentAgent?.local) {
+    html += `<div style="text-align: center; padding: 6px 20px 0; font-size: 12px; color: var(--yellow-dark); font-weight: 700;">📴 Local account — data dey only on this phone</div>`;
+  } else if (currentAgent?.agency_id) {
     html += `<div style="text-align: center; padding: 4px 20px 0; font-size: 12px; color: var(--muted); font-weight: 700;">🏢 Agency mode · ${currentAgent.role}</div>`;
   }
 
@@ -1661,7 +1859,7 @@ function bindAlertsEvents() {
   });
   const remindAll = document.getElementById('remindAllBtn');
   if (remindAll) remindAll.addEventListener('click', async () => {
-    const overdue = state.tenants.filter(t => { const a = getAlertLevel(t); return a && ['overdue','critical','due-today'].includes(a.level); });
+    const overdue = state.tenants.filter(t => { const a = getAlertLevel(t); return a && ['overdue', 'critical', 'due-today'].includes(a.level); });
     if (overdue.length === 0) { toast('No one to remind'); return; }
     if (!confirm(`Send WhatsApp to ${overdue.length} tenant${overdue.length > 1 ? 's' : ''}?`)) return;
     for (const t of overdue.slice(0, 5)) { await sendQuickReminder(t); await new Promise(r => setTimeout(r, 800)); }
@@ -1743,10 +1941,11 @@ function renderSettings() {
   const enabled = getReminderSettings().enabled !== false;
   const daysBefore = getReminderSettings().daysBefore || 14;
   const agentNameSet = localStorage.getItem(AGENT_NAME_KEY);
+  const isCloudUser = useCloud && currentAgent && !currentAgent.local;
 
   return `
     <div class="detail-body">
-      ${useCloud && currentAgent ? `
+      ${isCloudUser ? `
       <div class="settings-group-title">SMS Credits</div>
       <div class="settings-group">
         <div class="settings-row" id="refreshBalanceBtn">
@@ -1797,7 +1996,7 @@ function renderSettings() {
         </div>
       </div>
 
-      ${useCloud && currentAgent ? `
+      ${isCloudUser ? `
       <div class="settings-group-title">SMS History</div>
       <div class="settings-group">
         <div class="settings-row" id="viewSmsHistory">
@@ -1861,17 +2060,25 @@ function renderSettings() {
 
       <div class="settings-group-title">Account</div>
       <div class="settings-group">
-        ${useCloud && currentAgent ? `
+        ${currentAgent ? `
         <div class="settings-row">
-          <div class="settings-icon">☁️</div>
+          <div class="settings-icon">${currentAgent.local ? '📴' : '☁️'}</div>
           <div class="settings-info">
-            <div class="settings-label">Cloud sync</div>
+            <div class="settings-label">${currentAgent.local ? 'Local account' : 'Cloud sync'}</div>
             <div class="settings-value">
               <span class="sync-dot ${syncStatus}" id="syncDot"></span>
-              <span id="syncText">${currentAgent.name} · ${prettyPhone(currentAgent.phone)}</span>
+              <span id="syncText">${escapeHtml(currentAgent.name)} · ${prettyPhone(currentAgent.phone)}</span>
             </div>
           </div>
         </div>
+        ${currentAgent.local ? `
+        <div class="settings-row" style="background: var(--yellow-soft); cursor: default;">
+          <div class="settings-icon" style="background: var(--yellow-light);">ℹ️</div>
+          <div class="settings-info">
+            <div class="settings-label" style="color: var(--yellow-dark);">Not synced to cloud</div>
+            <div class="settings-value">Your data dey safe on this phone only. Sign out and create a cloud account to sync.</div>
+          </div>
+        </div>` : `
         <div class="settings-row" id="syncNowBtn">
           <div class="settings-icon">🔄</div>
           <div class="settings-info">
@@ -1879,7 +2086,7 @@ function renderSettings() {
             <div class="settings-value" id="queueText">${getQueue().length === 0 ? 'Everything up to date' : getQueue().length + ' change(s) pending'}</div>
           </div>
           <div class="settings-arrow">›</div>
-        </div>
+        </div>`}
         ` : ''}
         <div class="settings-row" id="setAgentName">
           <div class="settings-icon">✏️</div>
@@ -1889,7 +2096,7 @@ function renderSettings() {
           </div>
           <div class="settings-arrow">›</div>
         </div>
-        ${useCloud && currentAgent ? `
+        ${currentAgent ? `
         <div class="settings-row" id="signOutBtn">
           <div class="settings-icon">🚪</div>
           <div class="settings-info">
@@ -1901,7 +2108,7 @@ function renderSettings() {
         <div class="settings-row" id="signInBtn">
           <div class="settings-icon">🔐</div>
           <div class="settings-info">
-            <div class="settings-label">Sign in to cloud</div>
+            <div class="settings-label">Sign in</div>
             <div class="settings-value">Sync across devices</div>
           </div>
           <div class="settings-arrow">›</div>
@@ -1942,7 +2149,7 @@ function renderSettings() {
 
       <div style="text-align: center; padding: 24px 0; color: var(--muted); font-size: 13px;">
         <div style="font-weight: 800; color: var(--ink); font-size: 15px; margin-bottom: 4px;">AgentPal</div>
-        <div>Version 2.0 · Built for Nigeria 🇳🇬</div>
+        <div>Version 2.1 · Built for Nigeria 🇳🇬</div>
       </div>
       <div style="height: 20px;"></div>
     </div>
@@ -2093,9 +2300,16 @@ function bindSettingsEvents() {
 
   const signOutBtn = document.getElementById('signOutBtn');
   if (signOutBtn) signOutBtn.addEventListener('click', () => {
-    if (!confirm('Sign out? Your data go remain safe for cloud.')) return;
-    setSession(null); currentAgent = null; useCloud = false;
-    state.tenants = []; saveData();
+    const wasCloud = useCloud && currentAgent && !currentAgent.local;
+    const msg = wasCloud
+      ? 'Sign out? Your data go remain safe for cloud.'
+      : 'Sign out? Local data go stay on this phone.';
+    if (!confirm(msg)) return;
+    setSession(null);
+    currentAgent = null;
+    useCloud = false;
+    // Only wipe cached tenants for cloud accounts (cloud still holds them)
+    if (wasCloud) { state.tenants = []; saveData(); }
     appInitialized = false;
     document.getElementById('appHeader').style.display = 'none';
     document.getElementById('bottomNav').style.display = 'none';
@@ -2265,7 +2479,7 @@ function openTenantForm(id) {
       <div class="field">
         <label class="field-label">Years covered</label>
         <select class="select" name="yearsCovered">
-          ${[1,2,3,4,5,10].map(y => `<option value="${y}" ${t && t.yearsCovered === y ? 'selected' : ''}>${y} year${y > 1 ? 's' : ''}</option>`).join('')}
+          ${[1, 2, 3, 4, 5, 10].map(y => `<option value="${y}" ${t && t.yearsCovered === y ? 'selected' : ''}>${y} year${y > 1 ? 's' : ''}</option>`).join('')}
         </select>
         <div class="field-hint">If tenant paid advance for 10 years, pick 10.</div>
       </div>
@@ -2286,10 +2500,10 @@ function openTenantForm(id) {
     e.preventDefault();
     const fd = new FormData(form);
     const data = {
-      name: fd.get('name').trim(),
-      phone: fd.get('phone').trim(),
-      property: fd.get('property').trim(),
-      landlord: fd.get('landlord').trim(),
+      name: String(fd.get('name') || '').trim(),
+      phone: String(fd.get('phone') || '').trim(),
+      property: String(fd.get('property') || '').trim(),
+      landlord: String(fd.get('landlord') || '').trim(),
       rentAmount: Number(fd.get('rentAmount')),
       yearsCovered: Number(fd.get('yearsCovered')),
       dueDate: fd.get('dueDate'),
@@ -2302,12 +2516,12 @@ function openTenantForm(id) {
       savedTenant = t;
       toast('Tenant updated');
     } else {
-      savedTenant = {
+      savedTenant = Object.assign({
         id: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-        ...data, payments: [], reminders: [],
+        payments: [], reminders: [],
         createdBy: currentAgent?.id || null,
         createdAt: new Date().toISOString(),
-      };
+      }, data);
       state.tenants.push(savedTenant);
       toast('Tenant added');
     }
@@ -2380,12 +2594,11 @@ function openRecordPayment(tenantId) {
 
   openSheet('Record payment', html);
 
-  let payType = 'full';
   document.querySelectorAll('#sheet .toggle-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#sheet .toggle-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      payType = btn.dataset.type;
+      const payType = btn.dataset.type;
       const amountInput = document.querySelector('#payForm input[name="amount"]');
       if (payType === 'full') amountInput.value = balance;
       else { amountInput.value = ''; amountInput.focus(); }
@@ -2401,7 +2614,7 @@ function openRecordPayment(tenantId) {
     if (!t.payments) t.payments = [];
     t.payments.push({
       id: 'p_' + Date.now(), amount,
-      method: fd.get('method'), note: fd.get('note').trim(),
+      method: fd.get('method'), note: String(fd.get('note') || '').trim(),
       date: new Date().toISOString(),
     });
     await saveTenant(t);
@@ -2461,7 +2674,7 @@ function openSendReminder(tenantId) {
     if (channel === 'whatsapp') {
       window.open(`https://wa.me/${clean}?text=${message}`, '_blank');
     } else {
-      if (useCloud && currentAgent && supabase) {
+      if (useCloud && currentAgent && supabase && !currentAgent.local) {
         try {
           const res = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk`, {
             method: 'POST',
@@ -2589,9 +2802,10 @@ function openSetAgentName() {
   openSheet('Set agent name', html);
   document.getElementById('agentNameForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const v = new FormData(e.target).get('agentName').trim();
+    const v = String(new FormData(e.target).get('agentName') || '').trim();
     if (v) localStorage.setItem(AGENT_NAME_KEY, v);
     else localStorage.removeItem(AGENT_NAME_KEY);
+    if (currentAgent) { currentAgent.name = v || currentAgent.name; setSession(currentAgent); }
     closeSheet(); toast('Name saved'); render();
   });
 }
@@ -2620,7 +2834,7 @@ function importDataFn() {
         if (confirm(`Import ${parsed.tenants.length} tenant(s)?`)) {
           state.tenants = parsed.tenants;
           saveData();
-          if (useCloud && currentAgent) { for (const t of state.tenants) await queueUpsertTenant(t); }
+          if (useCloud && currentAgent && !currentAgent.local) { for (const t of state.tenants) await queueUpsertTenant(t); }
           toast('Imported'); render();
         }
       } catch { toast('Could not read'); }
@@ -2637,7 +2851,7 @@ function openBulkReminder() {
     return a && a.level !== 'upcoming' && (t.phone || '').trim();
   });
   if (candidates.length === 0) { toast('No overdue tenants with phone numbers'); return; }
-  if (!useCloud || !currentAgent || !supabase) { toast('Sign in to send bulk SMS'); return; }
+  if (!useCloud || !currentAgent || !supabase || currentAgent.local) { toast('Sign in to a cloud account to send bulk SMS'); return; }
 
   const agentName = localStorage.getItem(AGENT_NAME_KEY) || 'Your agent';
   const first = candidates[0];
@@ -2712,7 +2926,7 @@ function openBulkReminder() {
     const templateMsg = document.getElementById('bulkMsg').value;
     const recipients = selected.map(id => {
       const t = state.tenants.find(x => x.id === id);
-      let msg = templateMsg.replace(/^Good day \w+/i, `Good day ${t.name.split(' ')[0]}`);
+      const msg = templateMsg.replace(/^Good day \w+/i, `Good day ${t.name.split(' ')[0]}`);
       return { tenantId: t.id, tenantName: t.name, phone: normalizePhone(t.phone), message: msg };
     });
 
@@ -2781,7 +2995,7 @@ function showBulkResult(data) {
 async function manualSync() {
   if (!isOnline) { toast('No network'); return; }
   await processQueue();
-  if (useCloud && currentAgent) await loadTenants();
+  if (useCloud && currentAgent && !currentAgent.local) await loadTenants();
   toast('Synced');
   render();
 }
@@ -2819,10 +3033,25 @@ function toast(msg) {
   document.getElementById('toastText').textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => t.classList.remove('show'), 2200);
+  toastTimeout = setTimeout(() => t.classList.remove('show'), 2400);
 }
 
 // ===== AUTH SCREEN =====
+function resetAuthButtons() {
+  document.querySelectorAll('.auth-form button[type="submit"]').forEach(b => { b.disabled = false; });
+  const map = {
+    signinForm: 'Sign in',
+    signupForm: 'Create account',
+    forgotForm: 'Reset PIN',
+  };
+  Object.entries(map).forEach(([id, label]) => {
+    const el = document.querySelector(`#${id} button[type="submit"]`);
+    if (el) el.textContent = label;
+  });
+  const fs = document.getElementById('forgotSendBtn'); if (fs) { fs.disabled = false; fs.textContent = 'Send code'; }
+  const fv = document.getElementById('forgotVerifyBtn'); if (fv) { fv.disabled = false; fv.textContent = 'Verify code'; }
+}
+
 function showAuthScreen(mode) {
   const screen = document.getElementById('authScreen');
   screen.classList.remove('hide');
@@ -2853,14 +3082,15 @@ function showAuthScreen(mode) {
     showSigninBtn.style.display = 'inline';
   } else if (mode === 'forgot') {
     forgot.style.display = 'block';
-    sub.textContent = 'Reset your PIN via SMS';
+    sub.textContent = 'Reset your PIN';
     showSigninBtn.style.display = 'inline';
     document.getElementById('forgotStep1').style.display = 'block';
     document.getElementById('forgotStep2').style.display = 'none';
     document.getElementById('forgotStep3').style.display = 'none';
     document.getElementById('forgotForm').reset();
-    otpPhone = ''; otpVerified = false;
+    otpPhone = ''; otpVerified = false; otpMode = 'cloud';
   }
+  resetAuthButtons();
   hideAuthError();
   hideAuthInfo();
 }
@@ -2868,15 +3098,17 @@ function showAuthScreen(mode) {
 function showAuthError(msg) {
   const el = document.getElementById('authError');
   el.textContent = msg; el.style.display = 'block';
+  hideAuthInfo();
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.display = 'none'; }, 7000);
+  el._t = setTimeout(() => { el.style.display = 'none'; }, 9000);
 }
 function hideAuthError() { document.getElementById('authError').style.display = 'none'; }
 function showAuthInfo(msg) {
   const el = document.getElementById('authInfo');
   el.textContent = msg; el.style.display = 'block';
+  hideAuthError();
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.display = 'none'; }, 5000);
+  el._t = setTimeout(() => { el.style.display = 'none'; }, 6000);
 }
 function hideAuthInfo() { document.getElementById('authInfo').style.display = 'none'; }
 
@@ -2891,18 +3123,35 @@ document.getElementById('showSignupBtn').addEventListener('click', () => showAut
 document.getElementById('showSigninBtn').addEventListener('click', () => showAuthScreen('signin'));
 document.getElementById('showForgotBtn').addEventListener('click', () => showAuthScreen('forgot'));
 
+// --- keep PIN fields numeric only ---
+document.querySelectorAll('.pin-input').forEach(inp => {
+  inp.addEventListener('input', () => {
+    const max = Number(inp.getAttribute('maxlength')) || 4;
+    inp.value = inp.value.replace(/\D/g, '').slice(0, max);
+  });
+});
+
 document.getElementById('signinForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!supabase) { showAuthError('Cloud not configured. Use "Continue without account".'); return; }
+  hideAuthError(); hideAuthInfo();
   const fd = new FormData(e.target);
   const btn = e.target.querySelector('button[type="submit"]');
   const orig = btn.textContent;
+  const phone = String(fd.get('phone') || '').trim();
+  const pin = String(fd.get('pin') || '').trim();
+
+  if (!phone) return showAuthError('Enter your phone number');
+  if (!/^\d{4}$/.test(pin)) return showAuthError('PIN must be 4 digits');
+
   btn.textContent = 'Signing in...'; btn.disabled = true;
   try {
-    await doSignin({ phone: fd.get('phone'), pin: fd.get('pin') });
-    await loadTenants();
+    await doSignin({ phone, pin });
+    if (useCloud) await loadTenants();
+    else loadData();
     authDone();
+    toast(currentAgent.local ? 'Signed in (local)' : 'Signed in');
   } catch (err) {
+    console.error(err);
     showAuthError(err.message || 'Something went wrong');
     btn.textContent = orig; btn.disabled = false;
   }
@@ -2910,69 +3159,94 @@ document.getElementById('signinForm').addEventListener('submit', async (e) => {
 
 document.getElementById('signupForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!supabase) { showAuthError('Cloud not configured. Use "Continue without account".'); return; }
+  hideAuthError(); hideAuthInfo();
   const fd = new FormData(e.target);
   const btn = e.target.querySelector('button[type="submit"]');
   const orig = btn.textContent;
-  const name = (fd.get('name') || '').trim();
-  const phone = fd.get('phone');
-  const pin = fd.get('pin');
-  const pin2 = fd.get('pin2');
+  const name = String(fd.get('name') || '').trim();
+  const phone = String(fd.get('phone') || '').trim();
+  const pin = String(fd.get('pin') || '').trim();
+  const pin2 = String(fd.get('pin2') || '').trim();
 
   if (!name) return showAuthError('Enter your name');
-  if (!/^0?\d{10}$/.test(String(phone).replace(/\D/g, ''))) return showAuthError('Enter valid phone');
+  if (!isValidNgPhone(normalizePhone(phone))) return showAuthError('Enter a valid phone number, e.g. 08012345678');
   if (!/^\d{4}$/.test(pin)) return showAuthError('PIN must be 4 digits');
   if (pin !== pin2) return showAuthError('PINs no match');
 
   btn.textContent = 'Creating...'; btn.disabled = true;
   try {
     await doSignup({ name, phone, pin });
-    await loadTenants();
+    if (useCloud) await loadTenants();
+    else loadData();
     authDone();
+    toast(currentAgent.local ? 'Account created (on this phone)' : 'Account created');
   } catch (err) {
-    showAuthError(err.message || 'Could not create');
+    console.error(err);
+    showAuthError(err.message || 'Could not create account');
     btn.textContent = orig; btn.disabled = false;
   }
 });
 
 document.getElementById('forgotSendBtn').addEventListener('click', async () => {
-  if (!supabase) { showAuthError('Cloud not configured'); return; }
-  const phone = document.querySelector('#forgotStep1 input[name="phone"]').value;
-  if (!phone) return showAuthError('Enter your phone');
-  const normalized = normalizePhone(phone);
-  if (normalized.length !== 13) return showAuthError('Enter valid phone');
-
-  const { data: agent } = await supabase.from('agents').select('id').eq('phone', normalized).maybeSingle();
-  if (!agent) return showAuthError('No account with this number');
+  hideAuthError(); hideAuthInfo();
+  const phoneInput = document.querySelector('#forgotStep1 input[name="phone"]');
+  const normalized = normalizePhone(phoneInput.value);
+  if (!isValidNgPhone(normalized)) return showAuthError('Enter a valid phone number, e.g. 08012345678');
 
   const btn = document.getElementById('forgotSendBtn');
   const orig = btn.textContent;
-  btn.textContent = 'Sending...'; btn.disabled = true;
+  btn.textContent = 'Please wait...'; btn.disabled = true;
 
   try {
+    // 1) Local account on this device → skip OTP entirely
+    const accounts = getLocalAccounts();
+    if (accounts[normalized]) {
+      otpPhone = normalized; otpMode = 'local'; otpVerified = true;
+      document.getElementById('forgotStep1').style.display = 'none';
+      document.getElementById('forgotStep2').style.display = 'none';
+      document.getElementById('forgotStep3').style.display = 'block';
+      showAuthInfo('Local account found. Set your new PIN below.');
+      return;
+    }
+
+    // 2) Cloud account → send OTP
+    if (!supabase) throw new Error('No account found on this device. Create one first.');
+
+    const agent = await findAgentByPhone(normalized);
+    if (!agent) throw new Error('No account found with this number.');
+
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({ phone: normalized }),
     });
-    const data = await res.json();
+
+    let data;
+    try { data = await res.json(); }
+    catch { throw new Error('OTP service no dey available (HTTP ' + res.status + ').'); }
     if (!data.ok) throw new Error(data.error || 'Could not send code');
 
-    otpPhone = normalized;
+    otpPhone = normalized; otpMode = 'cloud'; otpVerified = false;
     document.getElementById('forgotStep1').style.display = 'none';
     document.getElementById('forgotStep2').style.display = 'block';
+    document.getElementById('forgotStep3').style.display = 'none';
+    const otpInput = document.querySelector('#forgotStep2 input[name="otp"]');
+    if (otpInput) otpInput.value = '';
     const sentVia = data.channel === 'whatsapp' ? 'WhatsApp' : 'SMS';
     document.getElementById('otpPhoneHint').textContent = `Code sent to ${prettyPhone(normalized)} via ${sentVia}`;
     showAuthInfo(`✅ Code sent via ${sentVia}!`);
   } catch (err) {
+    console.error(err);
     showAuthError(err.message);
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
   }
-  btn.textContent = orig; btn.disabled = false;
 });
 
 document.getElementById('forgotVerifyBtn').addEventListener('click', async () => {
-  const otp = document.querySelector('#forgotStep2 input[name="otp"]').value;
-  if (!/^\d{6}$/.test(otp)) return showAuthError('Enter 6-digit code');
+  hideAuthError(); hideAuthInfo();
+  const otp = String(document.querySelector('#forgotStep2 input[name="otp"]').value || '').trim();
+  if (!/^\d{6}$/.test(otp)) return showAuthError('Enter the 6-digit code');
 
   const btn = document.getElementById('forgotVerifyBtn');
   const orig = btn.textContent;
@@ -2984,52 +3258,75 @@ document.getElementById('forgotVerifyBtn').addEventListener('click', async () =>
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
       body: JSON.stringify({ phone: otpPhone, code: otp, action: 'verify' }),
     });
-    const data = await res.json();
+    let data;
+    try { data = await res.json(); }
+    catch { throw new Error('OTP service no dey available (HTTP ' + res.status + ').'); }
     if (!data.ok) throw new Error(data.error || 'Wrong code');
 
     otpVerified = true;
     document.getElementById('forgotStep2').style.display = 'none';
     document.getElementById('forgotStep3').style.display = 'block';
-    hideAuthError();
+    showAuthInfo('Code verified. Set your new PIN.');
   } catch (err) {
     showAuthError(err.message);
+  } finally {
+    btn.textContent = orig; btn.disabled = false;
   }
-  btn.textContent = orig; btn.disabled = false;
 });
 
 document.getElementById('forgotResendBtn').addEventListener('click', () => {
   document.getElementById('forgotStep1').style.display = 'block';
   document.getElementById('forgotStep2').style.display = 'none';
   document.querySelector('#forgotStep1 input[name="phone"]').value = prettyPhone(otpPhone);
+  const otpInput = document.querySelector('#forgotStep2 input[name="otp"]');
+  if (otpInput) otpInput.value = '';
+  hideAuthError(); hideAuthInfo();
 });
 
 document.getElementById('forgotForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!otpVerified) return showAuthError('Verify code first');
-  const newPin = document.querySelector('#forgotStep3 input[name="newPin"]').value;
-  const newPin2 = document.querySelector('#forgotStep3 input[name="newPin2"]').value;
+  hideAuthError(); hideAuthInfo();
+  if (!otpPhone) return showAuthError('Start over — enter your phone number first.');
+  if (!otpVerified) return showAuthError('Verify the code first.');
+
+  const newPin = String(document.querySelector('#forgotStep3 input[name="newPin"]').value || '').trim();
+  const newPin2 = String(document.querySelector('#forgotStep3 input[name="newPin2"]').value || '').trim();
   if (!/^\d{4}$/.test(newPin)) return showAuthError('PIN must be 4 digits');
   if (newPin !== newPin2) return showAuthError('PINs no match');
 
-  const otp = document.querySelector('#forgotStep2 input[name="otp"]').value;
   const btn = e.target.querySelector('#forgotStep3 button[type="submit"]');
   const orig = btn.textContent;
   btn.textContent = 'Resetting...'; btn.disabled = true;
 
   try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-otp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ phone: otpPhone, code: otp, action: 'reset', newPin }),
-    });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error);
+    if (otpMode === 'local') {
+      const accounts = getLocalAccounts();
+      if (!accounts[otpPhone]) throw new Error('Local account no dey anymore.');
+      accounts[otpPhone].pin_hash = await hashStr(newPin + '::' + otpPhone);
+      saveLocalAccounts(accounts);
+      await doSignin({ phone: otpPhone, pin: newPin });
+      loadData();
+    } else {
+      const otp = String(document.querySelector('#forgotStep2 input[name="otp"]').value || '').trim();
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ phone: otpPhone, code: otp, action: 'reset', newPin }),
+      });
+      let data;
+      try { data = await res.json(); }
+      catch { throw new Error('OTP service no dey available (HTTP ' + res.status + ').'); }
+      if (!data.ok) throw new Error(data.error);
 
-    await doSignin({ phone: otpPhone, pin: newPin });
-    await loadTenants();
-    otpPhone = ''; otpVerified = false;
+      await doSignin({ phone: otpPhone, pin: newPin });
+      await loadTenants();
+    }
+
+    otpPhone = ''; otpVerified = false; otpMode = 'cloud';
     authDone();
+    toast('PIN reset. You don sign in.');
   } catch (err) {
+    console.error(err);
     showAuthError(err.message);
     btn.textContent = orig; btn.disabled = false;
   }
@@ -3037,6 +3334,7 @@ document.getElementById('forgotForm').addEventListener('submit', async (e) => {
 
 document.getElementById('authGuest').addEventListener('click', () => {
   useCloud = false; currentAgent = null;
+  setSession(null);
   document.getElementById('authScreen').classList.add('hide');
   document.getElementById('appHeader').style.display = 'flex';
   document.getElementById('bottomNav').style.display = 'flex';
@@ -3048,7 +3346,7 @@ window.addEventListener('online', () => {
   isOnline = true;
   toast('Back online — syncing...');
   processQueue();
-  if (useCloud && currentAgent) loadTenants().then(() => render());
+  if (useCloud && currentAgent && !currentAgent.local) loadTenants().then(() => render());
 });
 
 window.addEventListener('offline', () => {
@@ -3060,6 +3358,9 @@ window.addEventListener('offline', () => {
 
 // ===== INIT =====
 async function init() {
+  if (booted) return;
+  booted = true;
+
   loadData();
 
   // No supabase configured → straight to guest mode
@@ -3072,15 +3373,16 @@ async function init() {
     return;
   }
 
-  // Check session
+  // Restore session
   const session = getSession();
   if (session && session.id) {
     currentAgent = session;
-    useCloud = true;
+    useCloud = !session.local;
     document.getElementById('authScreen').classList.add('hide');
     document.getElementById('appHeader').style.display = 'flex';
     document.getElementById('bottomNav').style.display = 'flex';
-    await loadTenants();
+    if (useCloud) await loadTenants();
+    else loadData();
     initMain();
   } else {
     showAuthScreen('signin');
@@ -3088,6 +3390,7 @@ async function init() {
 }
 
 function initMain() {
+  if (appInitialized) { render(); return; }
   appInitialized = true;
   render();
 
@@ -3097,9 +3400,10 @@ function initMain() {
   }
 
   checkReminders({ showSystem: false });
-  setInterval(() => checkReminders({ showSystem: true }), 5 * 60 * 1000);
+  clearInterval(window._reminderTimer);
+  window._reminderTimer = setInterval(() => checkReminders({ showSystem: true }), 5 * 60 * 1000);
 
-  if (useCloud && currentAgent) {
+  if (useCloud && currentAgent && !currentAgent.local) {
     fetchBalance().then(() => {
       if (state.currentView === 'settings' || state.currentView === 'home') render();
     });
@@ -3107,9 +3411,12 @@ function initMain() {
   }
 }
 
-// Boot
-document.addEventListener('DOMContentLoaded', init);
-if (document.readyState !== 'loading') init();
+// Boot (guarded so it only ever runs once)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
 </script>
 
 </body>
