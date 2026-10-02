@@ -1,0 +1,3116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>AgentPal — Rent Ledger</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%2316a34a'/><text x='50' y='68' font-size='58' font-weight='900' fill='white' text-anchor='middle' font-family='sans-serif'>A</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --green: #16a34a; --green-dark: #15803d; --green-light: #dcfce7; --green-soft: #f0fdf4;
+    --yellow: #eab308; --yellow-light: #fef9c3; --yellow-soft: #fefce8; --yellow-dark: #a16207;
+    --red: #dc2626; --red-light: #fee2e2; --red-soft: #fef2f2; --red-dark: #b91c1c;
+    --ink: #0b1220; --ink-2: #1a2536;
+    --muted: #64748b; --muted-2: #94a3b8;
+    --bg: #f8fafc; --bg-soft: #f1f5f9; --card: #ffffff; --border: #e2e8f0;
+    --radius: 16px; --radius-lg: 22px;
+    --shadow-sm: 0 1px 2px rgba(15,23,42,0.05);
+    --shadow: 0 4px 16px -4px rgba(15,23,42,0.10);
+    --shadow-lg: 0 20px 40px -12px rgba(15,23,42,0.20);
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, sans-serif;
+    background: var(--bg); color: var(--ink); font-size: 15px;
+    line-height: 1.5; -webkit-font-smoothing: antialiased; overscroll-behavior: none;
+  }
+
+  #app {
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
+    max-width: 480px; margin: 0 auto;
+    background: var(--bg); position: relative; overflow: hidden;
+  }
+  @media (min-width: 600px) {
+    body { background: #e2e8f0; }
+    #app {
+      height: 96vh; margin: 2vh auto; border-radius: 24px;
+      box-shadow: 0 30px 60px -20px rgba(15,23,42,0.3);
+      max-width: 420px;
+    }
+  }
+
+  /* ============ AUTH SCREEN ============ */
+  .auth-screen {
+    position: absolute; inset: 0;
+    background: linear-gradient(160deg, var(--ink) 0%, var(--ink-2) 100%);
+    z-index: 490; display: flex; align-items: flex-start;
+    justify-content: center; padding: 40px 24px 30px;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    transition: opacity 0.3s;
+  }
+  .auth-screen.hide { opacity: 0; pointer-events: none; display: none; }
+  .auth-inner { width: 100%; max-width: 400px; text-align: center; color: white; padding-bottom: 20px; }
+  .auth-logo {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    border-radius: 20px; display: flex; align-items: center;
+    justify-content: center; font-size: 34px; font-weight: 900;
+    color: white; margin: 0 auto 20px;
+    box-shadow: 0 20px 40px -12px rgba(22,163,74,0.5);
+  }
+  .auth-title { font-size: 30px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+  .auth-sub { font-size: 14px; color: rgba(255,255,255,0.65); margin-bottom: 28px; line-height: 1.5; }
+  .auth-form {
+    text-align: left; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 20px; padding: 22px 20px;
+  }
+  .auth-form .field-label { color: rgba(255,255,255,0.75); }
+  .auth-form .field-hint { color: rgba(255,255,255,0.45); }
+  .auth-form .input, .auth-form .select {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.15); color: white;
+  }
+  .auth-form .input::placeholder { color: rgba(255,255,255,0.3); }
+  .auth-form .input:focus, .auth-form .select:focus {
+    border-color: var(--green); background: rgba(255,255,255,0.12);
+  }
+  .auth-form .select option { color: var(--ink); background: white; }
+  .pin-input {
+    font-size: 22px !important; letter-spacing: 14px !important;
+    text-align: center; font-weight: 800 !important;
+    padding-left: 20px !important; padding-right: 6px !important;
+  }
+  .pin-input::placeholder { letter-spacing: 8px; font-weight: 400 !important; }
+  .auth-switch {
+    margin-top: 22px; font-size: 13.5px; color: rgba(255,255,255,0.5);
+    display: flex; justify-content: center; align-items: center;
+    gap: 4px; flex-wrap: wrap;
+  }
+  .auth-link {
+    background: none; border: none; color: var(--green);
+    font-weight: 700; font-size: 13.5px; cursor: pointer;
+    font-family: inherit; padding: 4px 6px; border-radius: 6px;
+    transition: background 0.15s;
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .auth-link:active { background: rgba(255,255,255,0.08); }
+  .auth-skip {
+    margin-top: 14px; color: rgba(255,255,255,0.5);
+    font-size: 13.5px; font-weight: 600;
+    background: none; border: none; cursor: pointer;
+    font-family: inherit; padding: 10px 16px;
+    border-radius: 100px; transition: color 0.15s, background 0.15s;
+  }
+  .auth-skip:active { color: white; background: rgba(255,255,255,0.1); }
+  .auth-error {
+    margin-top: 16px; padding: 12px 16px;
+    background: rgba(220,38,38,0.15);
+    border: 1px solid rgba(220,38,38,0.4);
+    color: #fca5a5; border-radius: 12px;
+    font-size: 13.5px; font-weight: 600;
+    line-height: 1.4; text-align: left;
+  }
+  .auth-info {
+    margin-top: 16px; padding: 12px 16px;
+    background: rgba(34,197,94,0.15);
+    border: 1px solid rgba(34,197,94,0.4);
+    color: #86efac; border-radius: 12px;
+    font-size: 13.5px; font-weight: 600;
+    line-height: 1.4; text-align: left;
+  }
+
+  /* ============ HEADER ============ */
+  .app-header {
+    padding: calc(16px + var(--safe-top)) 20px 16px;
+    background: var(--card); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-shrink: 0; z-index: 10;
+  }
+  .header-left { flex: 1; min-width: 0; }
+  .header-greeting {
+    font-size: 12px; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px;
+  }
+  .header-title {
+    font-size: 22px; font-weight: 800; letter-spacing: -0.6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .header-actions { display: flex; gap: 6px; }
+  .header-btn {
+    width: 42px; height: 42px; border-radius: 12px;
+    background: var(--bg-soft); border: none;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; cursor: pointer; position: relative;
+    transition: transform 0.15s, background 0.15s; flex-shrink: 0;
+  }
+  .header-btn:active { transform: scale(0.92); background: var(--border); }
+  .header-bell-badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 100px; background: var(--red); color: white;
+    font-size: 10px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--card);
+  }
+  .header-bell-badge.yellow { background: var(--yellow); color: #422006; }
+
+  /* ============ MAIN ============ */
+  .app-main {
+    flex: 1; overflow-y: auto; overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 100px; scroll-behavior: smooth;
+  }
+  .app-main::-webkit-scrollbar { display: none; }
+
+  /* ============ STATS ============ */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 10px; padding: 16px 20px 4px;
+  }
+  .stat-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 16px 10px; text-align: center;
+    border: 1.5px solid var(--border); cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .stat-card:active { transform: scale(0.96); }
+  .stat-card.active { box-shadow: var(--shadow); }
+  .stat-card.red.active { border-color: var(--red); }
+  .stat-card.yellow.active { border-color: var(--yellow); }
+  .stat-card.green.active { border-color: var(--green); }
+  .stat-num { font-size: 24px; font-weight: 800; letter-spacing: -1px; line-height: 1; margin-bottom: 5px; }
+  .stat-card.red .stat-num { color: var(--red); }
+  .stat-card.yellow .stat-num { color: var(--yellow-dark); }
+  .stat-card.green .stat-num { color: var(--green-dark); }
+  .stat-label {
+    font-size: 10.5px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.4px;
+  }
+
+  /* ============ SEARCH ============ */
+  .search-wrap { padding: 16px 20px 8px; }
+  .search {
+    width: 100%; padding: 13px 16px 13px 42px;
+    border-radius: 14px; border: 1.5px solid var(--border);
+    background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") no-repeat 14px center;
+    font-size: 15px; font-family: inherit; color: var(--ink);
+    outline: none; transition: border-color 0.15s;
+  }
+  .search::placeholder { color: var(--muted-2); }
+  .search:focus { border-color: var(--green); }
+
+  /* ============ SECTION ============ */
+  .section-label {
+    font-size: 11.5px; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px;
+    padding: 12px 20px 8px; display: flex; justify-content: space-between;
+    align-items: center;
+  }
+  .section-count { font-weight: 700; color: var(--muted-2); }
+
+  /* ============ TENANT CARD ============ */
+  .tenant-list { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; }
+  .tenant-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 14px; display: flex; align-items: center; gap: 12px;
+    border: 1.5px solid var(--border); cursor: pointer;
+    transition: transform 0.12s, border-color 0.15s;
+    position: relative; overflow: hidden;
+  }
+  .tenant-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px; border-radius: 0 2px 2px 0;
+  }
+  .tenant-card.red::before { background: var(--red); }
+  .tenant-card.yellow::before { background: var(--yellow); }
+  .tenant-card.green::before { background: var(--green); }
+  .tenant-card:active { transform: scale(0.985); border-color: var(--muted-2); }
+  .tenant-avatar {
+    width: 42px; height: 42px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 800; color: white;
+    flex-shrink: 0; letter-spacing: -0.3px;
+  }
+  .tenant-avatar.red { background: linear-gradient(135deg, #ef4444, var(--red)); }
+  .tenant-avatar.yellow { background: linear-gradient(135deg, #facc15, var(--yellow)); color: #713f12; }
+  .tenant-avatar.green { background: linear-gradient(135deg, #22c55e, var(--green)); }
+  .tenant-info { flex: 1; min-width: 0; }
+  .tenant-name {
+    font-size: 15px; font-weight: 700; color: var(--ink);
+    margin-bottom: 2px; display: flex; align-items: center; gap: 4px;
+    flex-wrap: wrap;
+  }
+  .tenant-sub {
+    font-size: 12.5px; color: var(--muted); font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tenant-status {
+    font-size: 10px; font-weight: 800; padding: 5px 10px;
+    border-radius: 100px; letter-spacing: 0.3px;
+    text-transform: uppercase; flex-shrink: 0;
+  }
+  .tenant-status.red { background: var(--red-light); color: var(--red-dark); }
+  .tenant-status.yellow { background: var(--yellow-light); color: var(--yellow-dark); }
+  .tenant-status.green { background: var(--green-light); color: var(--green-dark); }
+  .tenant-urgency {
+    font-size: 9px; font-weight: 800; color: var(--red-dark);
+    background: var(--red-light); padding: 2px 6px; border-radius: 100px;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .tenant-urgency.warn { color: var(--yellow-dark); background: var(--yellow-light); }
+  .tenant-urgency.info { color: #1e40af; background: #dbeafe; }
+
+  /* ============ EMPTY ============ */
+  .empty { text-align: center; padding: 60px 30px; }
+  .empty-icon { font-size: 52px; margin-bottom: 16px; opacity: 0.7; }
+  .empty-title { font-size: 18px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.3px; }
+  .empty-desc {
+    font-size: 14px; color: var(--muted); line-height: 1.5;
+    max-width: 260px; margin: 0 auto 24px;
+  }
+
+  /* ============ FAB ============ */
+  .fab {
+    position: absolute; bottom: calc(88px + var(--safe-bottom)); right: 20px;
+    width: 58px; height: 58px; border-radius: 50%;
+    background: var(--green); color: white; border: none;
+    font-size: 26px; font-weight: 300;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 12px 28px -6px rgba(22,163,74,0.5);
+    cursor: pointer; transition: transform 0.15s;
+    z-index: 40; line-height: 1; padding-bottom: 2px;
+  }
+  .fab:active { transform: scale(0.92); }
+  .fab.hide { display: none; }
+
+  /* ============ BOTTOM NAV ============ */
+  .bottom-nav {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    border-top: 1px solid var(--border);
+    display: flex; padding: 8px 8px calc(8px + var(--safe-bottom));
+    z-index: 50;
+  }
+  .nav-item {
+    flex: 1; background: none; border: none;
+    padding: 8px 4px; display: flex; flex-direction: column;
+    align-items: center; gap: 3px; cursor: pointer;
+    border-radius: 12px; transition: background 0.15s;
+    font-family: inherit; position: relative;
+  }
+  .nav-item:active { background: var(--bg-soft); }
+  .nav-icon { font-size: 20px; line-height: 1; position: relative; }
+  .nav-item.active .nav-icon { transform: scale(1.1); }
+  .nav-label { font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.2px; }
+  .nav-item.active .nav-label { color: var(--green); }
+  .nav-badge {
+    position: absolute; top: -4px; right: -8px;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 100px; background: var(--red); color: white;
+    font-size: 9px; font-weight: 800;
+    display: none; align-items: center; justify-content: center;
+  }
+
+  /* ============ MODAL ============ */
+  .modal-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(11,18,32,0.5);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    z-index: 100; opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .modal-backdrop.show { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--card); border-radius: 24px 24px 0 0;
+    padding: 8px 0 calc(20px + var(--safe-bottom));
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    z-index: 101; max-height: 92%;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sheet.show { transform: translateY(0); }
+  .sheet-handle {
+    width: 40px; height: 4px; background: var(--border);
+    border-radius: 2px; margin: 8px auto 16px; flex-shrink: 0;
+  }
+  .sheet-header {
+    padding: 0 22px 16px; display: flex; align-items: center;
+    justify-content: space-between; gap: 12px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .sheet-title { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .sheet-close {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--bg-soft); border: none; font-size: 18px;
+    cursor: pointer; display: flex; align-items: center;
+    justify-content: center; color: var(--muted); flex-shrink: 0;
+  }
+  .sheet-close:active { background: var(--border); }
+  .sheet-body { padding: 20px 22px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; }
+  .sheet-body::-webkit-scrollbar { display: none; }
+
+  /* ============ FORM ============ */
+  .field { margin-bottom: 18px; }
+  .field-label { display: block; font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  .field-label .req { color: var(--red); }
+  .field-hint { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .input, .textarea, .select {
+    width: 100%; padding: 14px 16px; border-radius: 14px;
+    border: 1.5px solid var(--border); background: var(--card);
+    font-size: 15px; font-family: inherit; color: var(--ink);
+    outline: none; transition: border-color 0.15s;
+    -webkit-appearance: none; appearance: none;
+  }
+  .input:focus, .textarea:focus, .select:focus { border-color: var(--green); }
+  .textarea { resize: none; min-height: 80px; }
+  .select {
+    background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 16px center;
+    padding-right: 42px;
+  }
+  .input-prefix { position: relative; }
+  .input-prefix .prefix {
+    position: absolute; left: 16px; top: 50%;
+    transform: translateY(-50%); font-weight: 700;
+    color: var(--muted); font-size: 15px; pointer-events: none;
+  }
+  .input-prefix .input { padding-left: 36px; font-weight: 700; }
+
+  .toggle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .toggle-btn {
+    padding: 14px 12px; border-radius: 14px;
+    border: 1.5px solid var(--border); background: var(--card);
+    font-size: 14px; font-weight: 700; font-family: inherit;
+    cursor: pointer; color: var(--muted);
+    transition: all 0.15s; text-align: center;
+  }
+  .toggle-btn:active { transform: scale(0.97); }
+  .toggle-btn.active { border-color: var(--green); background: var(--green-soft); color: var(--green-dark); }
+
+  /* ============ BUTTONS ============ */
+  .btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 16px 20px; border-radius: 14px;
+    font-size: 15px; font-weight: 800; font-family: inherit;
+    border: none; cursor: pointer;
+    transition: transform 0.15s, background 0.15s;
+    text-decoration: none; line-height: 1.2;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-primary { background: var(--green); color: white; box-shadow: 0 6px 16px -4px rgba(22,163,74,0.4); }
+  .btn-primary:hover:not(:disabled) { background: var(--green-dark); }
+  .btn-dark { background: var(--ink); color: white; }
+  .btn-danger { background: var(--red-light); color: var(--red-dark); }
+  .btn-ghost { background: var(--bg-soft); color: var(--ink); }
+  .btn-block { width: 100%; }
+  .btn-sm { padding: 12px 16px; font-size: 14px; border-radius: 12px; }
+
+  /* ============ ACTION ROW ============ */
+  .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+  .action-btn {
+    padding: 16px 12px; border-radius: 16px;
+    border: 1.5px solid var(--border); background: var(--card);
+    display: flex; flex-direction: column; align-items: flex-start;
+    gap: 6px; cursor: pointer; transition: all 0.15s;
+    font-family: inherit; text-align: left;
+  }
+  .action-btn:active { transform: scale(0.97); }
+  .action-icon { font-size: 22px; line-height: 1; }
+  .action-title { font-size: 14px; font-weight: 800; color: var(--ink); letter-spacing: -0.2px; }
+  .action-sub { font-size: 11.5px; color: var(--muted); font-weight: 500; }
+  .action-btn.green { border-color: var(--green-light); background: var(--green-soft); }
+  .action-btn.green .action-title { color: var(--green-dark); }
+  .action-btn.blue { border-color: #dbeafe; background: #eff6ff; }
+  .action-btn.blue .action-title { color: #1d4ed8; }
+  .action-btn.purple { border-color: #ede9fe; background: #f5f3ff; }
+  .action-btn.purple .action-title { color: #6d28d9; }
+
+  /* ============ TENANT DETAIL ============ */
+  .detail-hero {
+    background: linear-gradient(160deg, var(--ink) 0%, var(--ink-2) 100%);
+    color: white; padding: 28px 22px; border-radius: 0 0 28px 28px;
+    position: relative; overflow: hidden;
+  }
+  .detail-hero::before {
+    content: ''; position: absolute; top: -100px; right: -60px;
+    width: 240px; height: 240px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(22,163,74,0.35), transparent 65%);
+    pointer-events: none;
+  }
+  .detail-back {
+    background: rgba(255,255,255,0.12); border: none;
+    width: 40px; height: 40px; border-radius: 12px;
+    color: white; font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px; position: relative; z-index: 1;
+  }
+  .detail-back:active { background: rgba(255,255,255,0.22); }
+  .detail-avatar {
+    width: 64px; height: 64px; border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 800; color: white;
+    margin-bottom: 14px; position: relative; z-index: 1;
+  }
+  .detail-avatar.red { background: linear-gradient(135deg, #ef4444, var(--red)); }
+  .detail-avatar.yellow { background: linear-gradient(135deg, #facc15, var(--yellow)); color: #713f12; }
+  .detail-avatar.green { background: linear-gradient(135deg, #22c55e, var(--green)); }
+  .detail-name {
+    font-size: 26px; font-weight: 800; letter-spacing: -0.8px;
+    margin-bottom: 4px; position: relative; z-index: 1;
+  }
+  .detail-property {
+    font-size: 14px; color: rgba(255,255,255,0.7);
+    font-weight: 500; margin-bottom: 20px; position: relative; z-index: 1;
+  }
+  .detail-amounts {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 14px; position: relative; z-index: 1;
+  }
+  .detail-amount-label {
+    font-size: 11px; font-weight: 700;
+    color: rgba(255,255,255,0.5); text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 4px;
+  }
+  .detail-amount-value { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .detail-amount-value.red { color: #fca5a5; }
+  .detail-amount-value.green { color: #86efac; }
+  .detail-body { padding: 20px; }
+
+  /* ============ LEDGER ============ */
+  .ledger-item {
+    background: var(--card); border-radius: 14px;
+    padding: 14px 16px; display: flex; align-items: center;
+    gap: 12px; border: 1.5px solid var(--border); margin-bottom: 8px;
+  }
+  .ledger-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .ledger-dot.paid { background: var(--green); box-shadow: 0 0 0 4px var(--green-light); }
+  .ledger-dot.remind { background: var(--yellow); box-shadow: 0 0 0 4px var(--yellow-light); }
+  .ledger-dot.note { background: var(--muted-2); box-shadow: 0 0 0 4px var(--bg-soft); }
+  .ledger-info { flex: 1; min-width: 0; }
+  .ledger-title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+  .ledger-date { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .ledger-amount { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; flex-shrink: 0; }
+  .ledger-amount.paid { color: var(--green-dark); }
+
+  /* ============ TOAST ============ */
+  .toast {
+    position: absolute; top: 20px; left: 50%;
+    transform: translateX(-50%) translateY(-120%);
+    background: var(--ink); color: white;
+    padding: 14px 24px; border-radius: 100px;
+    font-size: 14px; font-weight: 700; z-index: 200;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: var(--shadow-lg);
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    white-space: nowrap; max-width: 90%;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast-icon {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--green); display: flex; align-items: center;
+    justify-content: center; font-size: 12px; flex-shrink: 0;
+  }
+
+  /* ============ REPORT CARD ============ */
+  .report-card {
+    background: var(--card); border-radius: var(--radius-lg);
+    padding: 24px; border: 1.5px solid var(--border);
+    box-shadow: var(--shadow-sm); margin-bottom: 16px;
+  }
+  .report-brand {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding-bottom: 16px; border-bottom: 1.5px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .report-brand-name { font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .report-brand-sub { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+  .report-badge {
+    background: var(--green-light); color: var(--green-dark);
+    font-size: 10px; font-weight: 900; padding: 5px 10px;
+    border-radius: 100px; letter-spacing: 0.6px;
+  }
+  .report-row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px; padding: 11px 0;
+    border-bottom: 1px dashed var(--border); font-size: 14px;
+  }
+  .report-row:last-child { border-bottom: none; }
+  .report-row-label { color: var(--muted); font-weight: 500; flex-shrink: 0; }
+  .report-row-value { font-weight: 700; color: var(--ink); text-align: right; word-break: break-word; }
+  .report-row-value.green { color: var(--green-dark); }
+  .report-row-value.red { color: var(--red-dark); }
+  .report-row-value.big { font-size: 17px; letter-spacing: -0.3px; }
+  .report-status {
+    margin-top: 16px; padding: 14px; border-radius: 12px;
+    text-align: center; font-size: 14px; font-weight: 800;
+    letter-spacing: -0.2px;
+  }
+  .report-status.red { background: var(--red-light); color: var(--red-dark); }
+  .report-status.yellow { background: var(--yellow-light); color: var(--yellow-dark); }
+  .report-status.green { background: var(--green-light); color: var(--green-dark); }
+
+  /* ============ SETTINGS ============ */
+  .settings-group {
+    background: var(--card); border-radius: var(--radius);
+    border: 1.5px solid var(--border); overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .settings-group-title {
+    font-size: 11.5px; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px;
+    padding: 0 20px 8px;
+  }
+  .settings-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 18px; border-bottom: 1px solid var(--border);
+    cursor: pointer; background: none; border-left: none;
+    border-right: none; border-top: none; width: 100%;
+    text-align: left; font-family: inherit;
+    transition: background 0.15s;
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row:active { background: var(--bg-soft); }
+  .settings-icon {
+    width: 38px; height: 38px; border-radius: 11px;
+    background: var(--bg-soft); display: flex; align-items: center;
+    justify-content: center; font-size: 18px; flex-shrink: 0;
+  }
+  .settings-info { flex: 1; min-width: 0; }
+  .settings-label { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 1px; }
+  .settings-value {
+    font-size: 12.5px; color: var(--muted); font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .settings-arrow { color: var(--muted-2); font-size: 18px; flex-shrink: 0; }
+  .settings-danger .settings-label { color: var(--red); }
+  .settings-danger .settings-icon { background: var(--red-light); color: var(--red-dark); }
+
+  /* ============ ALERT BANNER ============ */
+  .alert-banner {
+    margin: 12px 16px 0;
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    border: 1.5px solid #f59e0b; border-radius: 16px;
+    padding: 14px 16px; display: flex; align-items: center;
+    gap: 12px; cursor: pointer; transition: transform 0.15s;
+  }
+  .alert-banner:active { transform: scale(0.98); }
+  .alert-banner.critical {
+    background: linear-gradient(135deg, #fee2e2, #fecaca);
+    border-color: var(--red);
+  }
+  .alert-banner-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: white; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  }
+  .alert-banner-body { flex: 1; min-width: 0; }
+  .alert-banner-title {
+    font-size: 14px; font-weight: 800; color: #78350f;
+    margin-bottom: 2px; letter-spacing: -0.2px;
+  }
+  .alert-banner.critical .alert-banner-title { color: #7f1d1d; }
+  .alert-banner-sub { font-size: 12.5px; color: #92400e; font-weight: 500; }
+  .alert-banner.critical .alert-banner-sub { color: #991b1b; }
+  .alert-banner-arrow { color: #92400e; font-size: 18px; font-weight: 800; flex-shrink: 0; }
+
+  /* ============ ALERT CARDS ============ */
+  .alert-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 16px; display: flex; align-items: center;
+    gap: 14px; border: 1.5px solid var(--border);
+    margin-bottom: 10px; cursor: pointer;
+    transition: transform 0.15s; position: relative; overflow: hidden;
+  }
+  .alert-card:active { transform: scale(0.98); }
+  .alert-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  }
+  .alert-card.critical::before { background: #7f1d1d; }
+  .alert-card.overdue::before { background: var(--red); }
+  .alert-card.due-today::before { background: #f97316; }
+  .alert-card.due-soon::before { background: var(--yellow); }
+  .alert-card.upcoming::before { background: #3b82f6; }
+  .alert-level-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .alert-card.critical .alert-level-icon,
+  .alert-card.overdue .alert-level-icon { background: var(--red-light); }
+  .alert-card.due-today .alert-level-icon { background: #ffedd5; }
+  .alert-card.due-soon .alert-level-icon { background: var(--yellow-light); }
+  .alert-card.upcoming .alert-level-icon { background: #dbeafe; }
+  .alert-body { flex: 1; min-width: 0; }
+  .alert-title { font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 3px; letter-spacing: -0.2px; }
+  .alert-sub { font-size: 12.5px; color: var(--muted); font-weight: 500; line-height: 1.4; }
+  .alert-action {
+    font-size: 10px; font-weight: 800; padding: 6px 10px;
+    border-radius: 100px; text-transform: uppercase;
+    letter-spacing: 0.4px; flex-shrink: 0;
+  }
+  .alert-card.critical .alert-action { background: #7f1d1d; color: white; }
+  .alert-card.overdue .alert-action { background: var(--red-light); color: var(--red-dark); }
+  .alert-card.due-today .alert-action { background: #ffedd5; color: #c2410c; }
+  .alert-card.due-soon .alert-action { background: var(--yellow-light); color: var(--yellow-dark); }
+  .alert-card.upcoming .alert-action { background: #dbeafe; color: #1e40af; }
+
+  /* ============ MISC ============ */
+  .sync-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted-2); margin-right: 6px; vertical-align: middle;
+  }
+  .sync-dot.online { background: var(--green); }
+  .sync-dot.syncing { background: var(--yellow); animation: pulse 1s infinite; }
+  .sync-dot.offline { background: var(--muted-2); }
+  .sync-dot.error { background: var(--red); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .row-flex { display: flex; gap: 10px; }
+  .row-flex > * { flex: 1; }
+
+  @media (max-width: 360px) {
+    .stat-num { font-size: 20px; }
+    .header-title { font-size: 19px; }
+    .detail-name { font-size: 22px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ AUTH SCREEN ============ -->
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-inner">
+      <div class="auth-logo">A</div>
+      <div class="auth-title">AgentPal</div>
+      <p class="auth-sub" id="authSub">Sign in to sync your ledger everywhere</p>
+
+      <!-- SIGN IN -->
+      <form id="signinForm" class="auth-form">
+        <div class="field">
+          <label class="field-label">Phone number</label>
+          <input type="tel" class="input" name="phone" placeholder="08012345678" inputmode="numeric" autocomplete="tel" required>
+        </div>
+        <div class="field">
+          <label class="field-label">4-digit PIN</label>
+          <input type="tel" class="input pin-input" name="pin" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+      </form>
+
+      <!-- SIGN UP -->
+      <form id="signupForm" class="auth-form" style="display: none;">
+        <div class="field">
+          <label class="field-label">Your name</label>
+          <input type="text" class="input" name="name" placeholder="e.g. Musa Ibrahim" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Phone number</label>
+          <input type="tel" class="input" name="phone" placeholder="08012345678" inputmode="numeric" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Create 4-digit PIN</label>
+          <input type="tel" class="input pin-input" name="pin" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}" required>
+        </div>
+        <div class="field">
+          <label class="field-label">Confirm PIN</label>
+          <input type="tel" class="input pin-input" name="pin2" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}" required>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Create account</button>
+      </form>
+
+      <!-- FORGOT PIN -->
+      <form id="forgotForm" class="auth-form" style="display: none;">
+        <div id="forgotStep1">
+          <div class="field">
+            <label class="field-label">Phone number</label>
+            <input type="tel" class="input" name="phone" placeholder="08012345678" inputmode="numeric">
+          </div>
+          <p style="font-size: 12.5px; color: rgba(255,255,255,0.5); line-height: 1.5; margin-bottom: 14px;">
+            We go send 6-digit code to your phone via SMS.
+          </p>
+          <button type="button" class="btn btn-primary btn-block" id="forgotSendBtn">Send code</button>
+        </div>
+        <div id="forgotStep2" style="display: none;">
+          <div class="field">
+            <label class="field-label">6-digit code</label>
+            <input type="tel" class="input pin-input" name="otp" placeholder="••••••" inputmode="numeric" maxlength="6" style="letter-spacing: 10px !important; font-size: 20px !important;">
+            <div class="field-hint" id="otpPhoneHint">Sent to your phone</div>
+          </div>
+          <button type="button" class="btn btn-primary btn-block" id="forgotVerifyBtn">Verify code</button>
+          <button type="button" class="btn btn-ghost btn-block" id="forgotResendBtn" style="margin-top: 8px; color: white; background: rgba(255,255,255,0.08);">Resend code</button>
+        </div>
+        <div id="forgotStep3" style="display: none;">
+          <div class="field">
+            <label class="field-label">New 4-digit PIN</label>
+            <input type="tel" class="input pin-input" name="newPin" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}">
+          </div>
+          <div class="field">
+            <label class="field-label">Confirm new PIN</label>
+            <input type="tel" class="input pin-input" name="newPin2" placeholder="••••" inputmode="numeric" maxlength="4" pattern="\d{4}">
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Reset PIN</button>
+        </div>
+      </form>
+
+      <div class="auth-switch">
+        <button type="button" class="auth-link" id="showSignupBtn">Create account</button>
+        <span style="opacity: 0.4; margin: 0 4px;" id="switchDot1">·</span>
+        <button type="button" class="auth-link" id="showSigninBtn" style="display: none;">Sign in</button>
+        <span style="opacity: 0.4; margin: 0 4px;" id="switchDot2">·</span>
+        <button type="button" class="auth-link" id="showForgotBtn">Forgot PIN?</button>
+      </div>
+
+      <button type="button" class="auth-skip" id="authGuest">Continue without account</button>
+
+      <div class="auth-error" id="authError" style="display: none;"></div>
+      <div class="auth-info" id="authInfo" style="display: none;"></div>
+    </div>
+  </div>
+
+  <!-- ============ HEADER ============ -->
+  <header class="app-header" id="appHeader" style="display: none;">
+    <div class="header-left">
+      <div class="header-greeting" id="headerGreeting">Welcome back</div>
+      <div class="header-title" id="headerTitle">My Tenants</div>
+    </div>
+    <div class="header-actions">
+      <button class="header-btn" id="queueBadgeBtn" style="display: none;" title="Sync queue">
+        ⏳
+        <span class="header-bell-badge yellow" id="queueBadge" style="display: none;">0</span>
+      </button>
+      <button class="header-btn" id="headerBell" title="Alerts">
+        🔔
+        <span class="header-bell-badge" id="bellBadge" style="display: none;">0</span>
+      </button>
+      <button class="header-btn" id="headerAction" title="Menu">⚙️</button>
+    </div>
+  </header>
+
+  <!-- ============ MAIN ============ -->
+  <main class="app-main" id="appMain"></main>
+
+  <!-- ============ FAB ============ -->
+  <button class="fab hide" id="fab" aria-label="Add tenant">+</button>
+
+  <!-- ============ BOTTOM NAV ============ -->
+  <nav class="bottom-nav" id="bottomNav" style="display: none;">
+    <button class="nav-item active" data-view="home">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Home</span>
+    </button>
+    <button class="nav-item" data-view="alerts">
+      <span class="nav-icon">🔔<span class="nav-badge" id="navAlertBadge"></span></span>
+      <span class="nav-label">Alerts</span>
+    </button>
+    <button class="nav-item" data-view="reports">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Reports</span>
+    </button>
+    <button class="nav-item" data-view="settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <!-- ============ MODAL ============ -->
+  <div class="modal-backdrop" id="backdrop"></div>
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+      <div class="sheet-title" id="sheetTitle">Title</div>
+      <button class="sheet-close" id="sheetClose">✕</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+
+  <!-- ============ TOAST ============ -->
+  <div class="toast" id="toast">
+    <span class="toast-icon">✓</span>
+    <span id="toastText">Saved</span>
+  </div>
+
+</div>
+
+<script>
+/* ==========================================================================
+   AGENTPAL — Full Integrated App
+   ========================================================================== */
+
+// ===== CONFIG =====
+const SUPABASE_URL = 'https://gxdelbuenrocbfeqnnam.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4ZGVsYnVlbnJvY2JmZXFubmFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5Mzg2OTYsImV4cCI6MjEwNjUxNDY5Nn0.86Ynf3lLlztkJEtkXmQ4uwlDO8crh3w8xU5qv3EEyKs';
+
+const STORAGE_KEY = 'agentpal_data_v1';
+const SESSION_KEY = 'agentpal_session_v1';
+const QUEUE_KEY = 'agentpal_sync_queue_v1';
+const REMINDER_SETTINGS_KEY = 'agentpal_reminder_settings_v1';
+const AGENT_NAME_KEY = 'agentpal_agent_name';
+const PIN_KEY = 'agentpal_pin_v1';
+
+// ===== SUPABASE (optional) =====
+const CLOUD_CONFIGURED = !SUPABASE_URL.includes('PASTE_YOUR') && !SUPABASE_ANON_KEY.includes('PASTE_YOUR');
+let supabase = null;
+if (CLOUD_CONFIGURED && window.supabase) {
+  try {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch (e) { console.warn('Supabase init failed:', e); }
+}
+
+// ===== STATE =====
+let state = {
+  tenants: [],
+  currentView: 'home',
+  filter: 'all',
+  currentTenantId: null,
+};
+
+let currentAgent = null;
+let useCloud = false;
+let syncStatus = 'offline';
+let isOnline = navigator.onLine;
+let cachedBalance = null;
+let balanceFetchedAt = null;
+let otpPhone = '';
+let otpVerified = false;
+let appInitialized = false;
+
+// ===== HELPERS =====
+const fmt = {
+  naira(n) { n = Number(n) || 0; return '₦' + n.toLocaleString('en-NG'); },
+  shortNaira(n) {
+    n = Number(n) || 0;
+    if (n >= 1e9) return '₦' + (n / 1e9).toFixed(1).replace(/\.0$/, '') + 'b';
+    if (n >= 1e6) return '₦' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'm';
+    if (n >= 1e3) return '₦' + (n / 1e3).toFixed(0) + 'k';
+    return '₦' + n;
+  },
+  date(d) {
+    try { return new Date(d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }); }
+    catch { return '—'; }
+  },
+  dateTime(d) {
+    try { return new Date(d).toLocaleString('en-NG', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); }
+    catch { return '—'; }
+  },
+  today() { return new Date().toISOString().split('T')[0]; }
+};
+
+function initials(name) {
+  if (!name) return '?';
+  const parts = String(name).trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function normalizePhone(input) {
+  let p = String(input || '').replace(/\D/g, '');
+  if (!p) return '';
+  if (p.startsWith('0')) p = '234' + p.slice(1);
+  else if (!p.startsWith('234')) p = '234' + p;
+  return p;
+}
+
+function prettyPhone(normalized) {
+  if (!normalized || !normalized.startsWith('234')) return normalized || '';
+  return '0' + normalized.slice(3);
+}
+
+async function hashStr(str) {
+  try {
+    const data = new TextEncoder().encode('agentpal_v1_' + str);
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch { return ''; }
+}
+
+// ===== STORAGE =====
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) state.tenants = JSON.parse(raw).tenants || [];
+  } catch (e) { console.warn('Load error', e); state.tenants = []; }
+}
+
+function saveData() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ tenants: state.tenants })); } catch (e) { console.warn(e); }
+}
+
+async function saveTenant(tenant) {
+  saveData();
+  if (useCloud && currentAgent && supabase) await queueUpsertTenant(tenant);
+}
+
+function getSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch { return null; } }
+function setSession(s) { if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s)); else localStorage.removeItem(SESSION_KEY); }
+function getReminderSettings() { try { return JSON.parse(localStorage.getItem(REMINDER_SETTINGS_KEY) || '{}'); } catch { return {}; } }
+function saveReminderSettings(s) { localStorage.setItem(REMINDER_SETTINGS_KEY, JSON.stringify(s)); }
+
+// ===== TENANT CALCS =====
+function getPaidTotal(t) { return (t.payments || []).reduce((s, p) => s + Number(p.amount || 0), 0); }
+function getTotalDue(t) { return (Number(t.rentAmount) || 0) * (Number(t.yearsCovered) || 1); }
+function getBalance(t) { return Math.max(0, getTotalDue(t) - getPaidTotal(t)); }
+function getStatus(t) {
+  const paid = getPaidTotal(t), due = getTotalDue(t);
+  if (paid >= due && due > 0) return 'green';
+  if (paid > 0) return 'yellow';
+  return 'red';
+}
+function getStatusLabel(t) { const s = getStatus(t); return s === 'green' ? 'Paid' : s === 'yellow' ? 'Half' : 'Owing'; }
+function getSubtext(t) {
+  const s = getStatus(t), bal = getBalance(t);
+  if (s === 'green') return t.dueDate ? `Paid till ${fmt.date(t.dueDate)}` : 'Fully paid';
+  if (s === 'yellow') return `${fmt.shortNaira(getPaidTotal(t))} of ${fmt.shortNaira(getTotalDue(t))} paid`;
+  if (t.dueDate) {
+    const days = Math.floor((new Date() - new Date(t.dueDate)) / 86400000);
+    if (days > 0) return `Due ${days} day${days > 1 ? 's' : ''} ago`;
+    if (days === 0) return 'Due today';
+    return `Due in ${Math.abs(days)} days`;
+  }
+  return `Owes ${fmt.shortNaira(bal)}`;
+}
+
+// ===== AUTO REMINDER =====
+function getAlertLevel(t) {
+  const balance = getBalance(t);
+  if (balance <= 0 || !t.dueDate) return null;
+  const settings = getReminderSettings();
+  const daysBefore = settings.daysBefore || 14;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const due = new Date(t.dueDate); due.setHours(0,0,0,0);
+  const days = Math.round((due - now) / 86400000);
+
+  if (days < 0) {
+    const overdue = Math.abs(days);
+    if (overdue >= 30) return { level: 'critical', days: overdue, label: 'Critical' };
+    return { level: 'overdue', days: overdue, label: 'Overdue' };
+  }
+  if (days === 0) return { level: 'due-today', days: 0, label: 'Due today' };
+  if (days <= 7) return { level: 'due-soon', days, label: 'Due soon' };
+  if (days <= daysBefore) return { level: 'upcoming', days, label: 'Upcoming' };
+  return null;
+}
+
+function getAllAlerts() {
+  try {
+    const priority = { critical: 0, overdue: 1, 'due-today': 2, 'due-soon': 3, upcoming: 4 };
+    return state.tenants
+      .map(t => ({ tenant: t, alert: getAlertLevel(t) }))
+      .filter(x => x.alert)
+      .sort((a, b) => {
+        const p = priority[a.alert.level] - priority[b.alert.level];
+        return p !== 0 ? p : a.alert.days - b.alert.days;
+      });
+  } catch { return []; }
+}
+
+async function checkReminders({ showSystem = true } = {}) {
+  const settings = getReminderSettings();
+  if (settings.enabled === false) { updateBellBadge(0); return []; }
+  const alerts = getAllAlerts();
+  updateBellBadge(alerts.length);
+
+  if (showSystem && alerts.length > 0) {
+    const today = new Date().toISOString().split('T')[0];
+    const toNotify = [];
+    for (const { tenant, alert } of alerts) {
+      if (!tenant.alertLog) tenant.alertLog = {};
+      const key = alert.level + '_' + today;
+      if (!tenant.alertLog[key]) { toNotify.push({ tenant, alert }); tenant.alertLog[key] = true; }
+    }
+    if (toNotify.length > 0) { await showSystemNotifications(toNotify); saveData(); }
+  }
+  return alerts;
+}
+
+function updateBellBadge(count) {
+  const badge = document.getElementById('bellBadge');
+  const navBadge = document.getElementById('navAlertBadge');
+  if (badge) {
+    if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = 'flex'; }
+    else badge.style.display = 'none';
+  }
+  if (navBadge) {
+    if (count > 0) { navBadge.textContent = count > 99 ? '99+' : count; navBadge.style.display = 'flex'; }
+    else navBadge.style.display = 'none';
+  }
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') return false;
+  try { return await Notification.requestPermission() === 'granted'; } catch { return false; }
+}
+
+async function showSystemNotifications(items) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  for (const { tenant, alert } of items.slice(0, 3)) {
+    let body = '';
+    if (alert.level === 'critical') body = `🚨 ${alert.days} days overdue — ${fmt.naira(getBalance(tenant))}`;
+    else if (alert.level === 'overdue') body = `🔴 ${alert.days}d overdue — ${fmt.naira(getBalance(tenant))}`;
+    else if (alert.level === 'due-today') body = `🟠 Rent due today — ${fmt.naira(getBalance(tenant))}`;
+    else if (alert.level === 'due-soon') body = `🟡 Due in ${alert.days}d`;
+    else body = `🔵 Due in ${alert.days}d`;
+    try {
+      new Notification(`${tenant.name} — ${tenant.property || 'Rent'}`, { body, tag: 'agentpal-' + tenant.id + '-' + alert.level });
+    } catch (e) { console.warn(e); }
+  }
+}
+
+function renderAlertBanner() {
+  const settings = getReminderSettings();
+  if (settings.enabled === false) return '';
+  const alerts = getAllAlerts();
+  if (alerts.length === 0) return '';
+
+  const critical = alerts.filter(a => a.alert.level === 'critical').length;
+  const overdue = alerts.filter(a => a.alert.level === 'overdue').length;
+  const dueSoon = alerts.filter(a => ['due-today', 'due-soon'].includes(a.alert.level)).length;
+
+  let title, sub, icon, isCritical = false;
+  if (critical > 0) { title = `${critical} tenant${critical > 1 ? 's' : ''} dey critical`; sub = 'Overdue 30+ days. Follow up now.'; icon = '🚨'; isCritical = true; }
+  else if (overdue > 0) { title = `${overdue} tenant${overdue > 1 ? 's' : ''} overdue`; sub = 'Rent don pass due date.'; icon = '🔴'; isCritical = true; }
+  else if (dueSoon > 0) { title = `${dueSoon} rent${dueSoon > 1 ? 's' : ''} due soon`; sub = 'Tap to see who dey due.'; icon = '🔔'; }
+  else { title = `${alerts.length} upcoming rent${alerts.length > 1 ? 's' : ''}`; sub = 'All dey within 2 weeks.'; icon = '🔵'; }
+
+  return `
+    <div class="alert-banner ${isCritical ? 'critical' : ''}" id="alertBanner">
+      <div class="alert-banner-icon">${icon}</div>
+      <div class="alert-banner-body">
+        <div class="alert-banner-title">${title}</div>
+        <div class="alert-banner-sub">${sub}</div>
+      </div>
+      <div class="alert-banner-arrow">›</div>
+    </div>
+  `;
+}
+
+function getUrgencyChip(t) {
+  const a = getAlertLevel(t);
+  if (!a) return '';
+  if (a.level === 'critical') return `<span class="tenant-urgency">${a.days}d overdue</span>`;
+  if (a.level === 'overdue') return `<span class="tenant-urgency">${a.days}d late</span>`;
+  if (a.level === 'due-today') return `<span class="tenant-urgency">Due today</span>`;
+  if (a.level === 'due-soon') return `<span class="tenant-urgency warn">${a.days}d left</span>`;
+  if (a.level === 'upcoming') return `<span class="tenant-urgency info">${a.days}d</span>`;
+  return '';
+}
+
+// ===== SMS CREDITS =====
+async function fetchBalance(force = false) {
+  if (!supabase || !useCloud || !currentAgent) return null;
+  if (!force && cachedBalance !== null && balanceFetchedAt && (Date.now() - balanceFetchedAt) < 5 * 60 * 1000) return cachedBalance;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/get-balance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ agentId: currentAgent.id }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    cachedBalance = { amount: Number(data.balance) || 0, currency: data.currency || 'NGN' };
+    balanceFetchedAt = Date.now();
+    return cachedBalance;
+  } catch (err) { console.warn('Balance fetch failed', err); return null; }
+}
+
+function getBalanceStatus(balance) {
+  if (balance === null) return { level: 'unknown', color: 'var(--muted)', label: 'Unknown' };
+  if (balance <= 0) return { level: 'empty', color: 'var(--red)', label: 'Empty' };
+  if (balance < 20) return { level: 'low', color: 'var(--red)', label: 'Critical' };
+  if (balance < 100) return { level: 'warning', color: '#f59e0b', label: 'Low' };
+  return { level: 'ok', color: 'var(--green)', label: 'Good' };
+}
+
+// ===== MESSAGE LOG =====
+async function loadMessageLog(limit = 50) {
+  if (!currentAgent || !supabase) return [];
+  try {
+    const { data } = await supabase.from('message_log').select('*').eq('agent_id', currentAgent.id).order('created_at', { ascending: false }).limit(limit);
+    return data || [];
+  } catch { return []; }
+}
+function statusIcon(s) { return s === 'delivered' ? '✅' : s === 'sent' ? '📤' : s === 'failed' || s === 'rejected' ? '❌' : '⏳'; }
+function statusLabel(s) { return { pending: 'Pending', sent: 'Sent', delivered: 'Delivered', failed: 'Failed', rejected: 'Rejected' }[s] || s; }
+
+// ===== AUTH =====
+async function doSignup({ name, phone, pin }) {
+  if (!supabase) throw new Error('Cloud not configured. Use guest mode.');
+  const normalized = normalizePhone(phone);
+  const { data: existing } = await supabase.from('agents').select('id').eq('phone', normalized).maybeSingle();
+  if (existing) throw new Error('This phone number don already get account. Try sign in.');
+  const pin_hash = await hashStr(pin + '::' + normalized);
+  const { data, error } = await supabase.from('agents').insert({
+    phone: normalized, name: name.trim(), pin_hash,
+    security_question: 'N/A', security_answer_hash: 'N/A',
+  }).select().single();
+  if (error) throw error;
+  const session = { id: data.id, phone: data.phone, name: data.name };
+  setSession(session); currentAgent = session; useCloud = true;
+  localStorage.setItem(AGENT_NAME_KEY, name.trim());
+  return data;
+}
+
+async function doSignin({ phone, pin }) {
+  if (!supabase) throw new Error('Cloud not configured');
+  const normalized = normalizePhone(phone);
+  const { data, error } = await supabase.from('agents').select('*').eq('phone', normalized).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('No account with this phone number.');
+  const pin_hash = await hashStr(pin + '::' + normalized);
+  if (data.pin_hash !== pin_hash) throw new Error('Wrong PIN. Try again.');
+  const session = { id: data.id, phone: data.phone, name: data.name };
+  setSession(session); currentAgent = session; useCloud = true;
+  if (data.name) localStorage.setItem(AGENT_NAME_KEY, data.name);
+  return data;
+}
+
+// ===== AGENCY =====
+async function createAgency(name) {
+  if (!currentAgent || !supabase) throw new Error('Sign in first');
+  const { data: rpcData } = await supabase.rpc('gen_invite_code');
+  const invite_code = rpcData || Math.random().toString(36).slice(2, 8).toUpperCase();
+  const { data, error } = await supabase.from('agencies').insert({
+    name: name.trim(), owner_id: currentAgent.id, invite_code,
+  }).select().single();
+  if (error) throw error;
+  await supabase.from('agents').update({ agency_id: data.id, role: 'owner' }).eq('id', currentAgent.id);
+  currentAgent.agency_id = data.id; currentAgent.role = 'owner';
+  setSession(currentAgent);
+  return data;
+}
+
+async function joinAgency(code) {
+  if (!currentAgent || !supabase) throw new Error('Sign in first');
+  const { data: agency } = await supabase.from('agencies').select('*').eq('invite_code', code.trim().toUpperCase()).maybeSingle();
+  if (!agency) throw new Error('Invalid invite code');
+  await supabase.from('agents').update({ agency_id: agency.id, role: 'agent' }).eq('id', currentAgent.id);
+  currentAgent.agency_id = agency.id; currentAgent.role = 'agent';
+  setSession(currentAgent);
+  return agency;
+}
+
+async function leaveAgency() {
+  if (!currentAgent || !supabase) return;
+  if (currentAgent.role === 'owner') throw new Error('Owner no fit leave.');
+  await supabase.from('agents').update({ agency_id: null, role: 'solo' }).eq('id', currentAgent.id);
+  currentAgent.agency_id = null; currentAgent.role = 'solo';
+  setSession(currentAgent);
+}
+
+async function getAgencyMembers() {
+  if (!currentAgent?.agency_id || !supabase) return [];
+  const { data } = await supabase.from('agents').select('id, name, phone, role, created_at').eq('agency_id', currentAgent.agency_id).order('role', { ascending: true });
+  return data || [];
+}
+
+async function removeMember(agentId) {
+  if (currentAgent?.role !== 'owner' || !supabase) throw new Error('Only owner fit remove');
+  if (agentId === currentAgent.id) throw new Error('You no fit remove yourself');
+  await supabase.from('agents').update({ agency_id: null, role: 'solo' }).eq('id', agentId);
+}
+
+// ===== OFFLINE QUEUE =====
+function getQueue() { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; } }
+function saveQueue(q) { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); updateQueueBadge(); }
+function enqueue(op) {
+  const q = getQueue();
+  op.id = 'op_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  op.attempts = 0; op.createdAt = new Date().toISOString();
+  q.push(op); saveQueue(q); processQueue();
+}
+
+async function processQueue() {
+  if (!useCloud || !currentAgent || !isOnline || !supabase) return;
+  const q = getQueue();
+  if (q.length === 0) { syncStatus = 'online'; updateSyncUI(); return; }
+
+  syncStatus = 'syncing'; updateSyncUI();
+  const remaining = [];
+  for (const op of q) {
+    try {
+      if (op.type === 'upsert_tenant') {
+        const { error } = await supabase.from('tenants').upsert([op.payload], { onConflict: 'id' });
+        if (error) throw error;
+      } else if (op.type === 'delete_tenant') {
+        await supabase.from('tenants').delete().eq('id', op.payload.id);
+      }
+    } catch (err) {
+      op.attempts = (op.attempts || 0) + 1;
+      op.lastError = err.message;
+      if (op.attempts < 10) remaining.push(op);
+    }
+  }
+  saveQueue(remaining);
+  syncStatus = remaining.length === 0 ? 'online' : 'error';
+  updateSyncUI();
+  if (remaining.length > 0) scheduleRetry();
+}
+
+function scheduleRetry() {
+  clearTimeout(window._retryTimer);
+  const q = getQueue();
+  const maxAttempts = Math.max(...q.map(o => o.attempts || 0), 0);
+  const delay = Math.min(5000 * Math.pow(2, maxAttempts), 5 * 60 * 1000);
+  window._retryTimer = setTimeout(processQueue, delay);
+}
+
+function updateQueueBadge() {
+  const q = getQueue();
+  const badge = document.getElementById('queueBadge');
+  const btn = document.getElementById('queueBadgeBtn');
+  if (!badge || !btn) return;
+  if (q.length > 0) {
+    badge.textContent = q.length > 99 ? '99+' : q.length;
+    badge.style.display = 'flex';
+    btn.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+    btn.style.display = 'none';
+  }
+}
+
+function updateSyncUI() {
+  const dot = document.getElementById('syncDot');
+  if (dot) dot.className = 'sync-dot ' + syncStatus;
+  const txt = document.getElementById('syncText');
+  if (txt) {
+    if (!useCloud) txt.textContent = 'Offline only';
+    else if (!currentAgent) txt.textContent = 'Not signed in';
+    else txt.textContent = currentAgent.name + ' · ' + prettyPhone(currentAgent.phone);
+  }
+}
+
+async function queueUpsertTenant(tenant) {
+  if (!useCloud || !currentAgent) return;
+  const payload = {
+    id: tenant.id, agent_id: currentAgent.id,
+    agency_id: currentAgent.agency_id || null,
+    created_by: tenant.createdBy || currentAgent.id,
+    name: tenant.name, phone: tenant.phone || null, property: tenant.property || null,
+    landlord: tenant.landlord || null,
+    rent_amount: Number(tenant.rentAmount) || 0,
+    years_covered: Number(tenant.yearsCovered) || 1,
+    due_date: tenant.dueDate || null,
+    payments: tenant.payments || [],
+    reminders: tenant.reminders || [],
+    alert_log: tenant.alertLog || {},
+  };
+
+  if (!isOnline || !supabase) { enqueue({ type: 'upsert_tenant', payload }); return; }
+
+  try {
+    const { error } = await supabase.from('tenants').upsert([payload], { onConflict: 'id' });
+    if (error) throw error;
+    syncStatus = 'online';
+  } catch (err) {
+    console.warn('Upsert failed, queuing', err);
+    enqueue({ type: 'upsert_tenant', payload });
+  }
+  updateSyncUI();
+}
+
+function queueDeleteTenant(tenantId) {
+  if (!useCloud || !currentAgent) return;
+  enqueue({ type: 'delete_tenant', payload: { id: tenantId } });
+}
+
+async function loadTenants() {
+  if (!useCloud || !currentAgent || !supabase) return;
+  syncStatus = 'syncing'; updateSyncUI();
+  try {
+    let query = supabase.from('tenants').select('*');
+    if (currentAgent.agency_id) query = query.eq('agency_id', currentAgent.agency_id);
+    else query = query.eq('agent_id', currentAgent.id).is('agency_id', null);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    state.tenants = (data || []).map(row => ({
+      id: row.id, name: row.name, phone: row.phone || '', property: row.property || '',
+      landlord: row.landlord || '', rentAmount: Number(row.rent_amount) || 0,
+      yearsCovered: Number(row.years_covered) || 1, dueDate: row.due_date || '',
+      payments: row.payments || [], reminders: row.reminders || [],
+      alertLog: row.alert_log || {}, createdAt: row.created_at, createdBy: row.created_by,
+    }));
+    saveData();
+    syncStatus = 'online';
+  } catch (err) {
+    console.warn('Load error', err);
+    syncStatus = 'error';
+  }
+  updateSyncUI();
+}
+
+// ===== RENDER =====
+function render() {
+  if (!appInitialized) return;
+  try {
+    renderHeader();
+    renderMain();
+    renderNav();
+    updateQueueBadge();
+    updateBellBadge(getAllAlerts().length);
+  } catch (e) { console.error('Render error:', e); }
+}
+
+function renderHeader() {
+  const greeting = document.getElementById('headerGreeting');
+  const title = document.getElementById('headerTitle');
+  const action = document.getElementById('headerAction');
+  const hour = new Date().getHours();
+  let greetText = 'Good morning';
+  if (hour >= 12 && hour < 17) greetText = 'Good afternoon';
+  else if (hour >= 17) greetText = 'Good evening';
+
+  if (state.currentView === 'home') {
+    const name = currentAgent ? currentAgent.name.split(' ')[0] : (localStorage.getItem(AGENT_NAME_KEY) || '').split(' ')[0];
+    greeting.textContent = name ? greetText + ', ' + name : greetText;
+    title.textContent = 'My Tenants';
+    action.textContent = '⚙️';
+    action.onclick = () => switchView('settings');
+  } else if (state.currentView === 'alerts') {
+    greeting.textContent = 'Auto-reminder';
+    title.textContent = 'Alerts';
+    action.textContent = '🏠';
+    action.onclick = () => switchView('home');
+  } else if (state.currentView === 'reports') {
+    greeting.textContent = 'Overview';
+    title.textContent = 'Reports';
+    action.textContent = '🏠';
+    action.onclick = () => switchView('home');
+  } else if (state.currentView === 'settings') {
+    greeting.textContent = 'AgentPal';
+    title.textContent = 'Settings';
+    action.textContent = '🏠';
+    action.onclick = () => switchView('home');
+  } else if (state.currentView === 'tenant') {
+    greeting.textContent = 'Tenant';
+    title.textContent = 'Details';
+    action.textContent = '✏️';
+    action.onclick = () => openEditTenant(state.currentTenantId);
+  }
+}
+
+function renderMain() {
+  const main = document.getElementById('appMain');
+  const fab = document.getElementById('fab');
+
+  if (state.currentView === 'home') {
+    fab.classList.remove('hide');
+    main.innerHTML = renderHome();
+    bindHomeEvents();
+  } else if (state.currentView === 'alerts') {
+    fab.classList.add('hide');
+    main.innerHTML = renderAlerts();
+    bindAlertsEvents();
+  } else if (state.currentView === 'reports') {
+    fab.classList.add('hide');
+    main.innerHTML = renderReports();
+    bindReportsEvents();
+  } else if (state.currentView === 'settings') {
+    fab.classList.add('hide');
+    main.innerHTML = renderSettings();
+    bindSettingsEvents();
+  } else if (state.currentView === 'tenant') {
+    fab.classList.add('hide');
+    main.innerHTML = renderTenantDetail();
+    bindTenantDetailEvents();
+  }
+}
+
+function renderNav() {
+  document.querySelectorAll('.nav-item').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.view === state.currentView);
+  });
+}
+
+// ===== HOME =====
+function renderHome() {
+  const tenants = state.tenants;
+  const red = tenants.filter(t => getStatus(t) === 'red').length;
+  const yellow = tenants.filter(t => getStatus(t) === 'yellow').length;
+  const green = tenants.filter(t => getStatus(t) === 'green').length;
+
+  let list = tenants;
+  if (state.filter !== 'all') list = tenants.filter(t => getStatus(t) === state.filter);
+
+  const order = { red: 0, yellow: 1, green: 2 };
+  list = [...list].sort((a, b) => {
+    const o = order[getStatus(a)] - order[getStatus(b)];
+    return o !== 0 ? o : (a.name || '').localeCompare(b.name || '');
+  });
+
+  let html = renderAlertBanner();
+
+  if (cachedBalance && cachedBalance.amount < 20 && useCloud) {
+    html += `
+      <div class="alert-banner critical" id="lowBalanceBanner" style="margin-top: 12px;">
+        <div class="alert-banner-icon">⚠️</div>
+        <div class="alert-banner-body">
+          <div class="alert-banner-title">SMS credits low</div>
+          <div class="alert-banner-sub">${cachedBalance.amount} SMS left. Top up to send reminders.</div>
+        </div>
+        <div class="alert-banner-arrow">›</div>
+      </div>
+    `;
+  }
+
+  html += `
+    <div class="stats-row">
+      <button class="stat-card red ${state.filter === 'red' ? 'active' : ''}" data-filter="red">
+        <div class="stat-num">${red}</div><div class="stat-label">Owing</div>
+      </button>
+      <button class="stat-card yellow ${state.filter === 'yellow' ? 'active' : ''}" data-filter="yellow">
+        <div class="stat-num">${yellow}</div><div class="stat-label">Half</div>
+      </button>
+      <button class="stat-card green ${state.filter === 'green' ? 'active' : ''}" data-filter="green">
+        <div class="stat-num">${green}</div><div class="stat-label">Paid</div>
+      </button>
+    </div>
+    <div class="search-wrap">
+      <input type="text" class="search" id="searchInput" placeholder="Search tenant..." autocomplete="off">
+    </div>
+  `;
+
+  if (currentAgent?.agency_id) {
+    html += `<div style="text-align: center; padding: 4px 20px 0; font-size: 12px; color: var(--muted); font-weight: 700;">🏢 Agency mode · ${currentAgent.role}</div>`;
+  }
+
+  if (tenants.length === 0) {
+    html += `
+      <div class="empty">
+        <div class="empty-icon">📒</div>
+        <div class="empty-title">No tenant yet</div>
+        <p class="empty-desc">Tap the + button below to add your first tenant and start tracking rent.</p>
+        <button class="btn btn-primary" id="emptyAdd"><span>+</span> Add First Tenant</button>
+      </div>
+    `;
+  } else if (list.length === 0) {
+    html += `
+      <div class="empty">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">No tenant here</div>
+        <p class="empty-desc">No tenant match this filter. Try another tab.</p>
+      </div>
+    `;
+  } else {
+    const label = state.filter === 'all' ? 'All Tenants' : `${state.filter.charAt(0).toUpperCase() + state.filter.slice(1)} Tenants`;
+    html += `<div class="section-label">${label} <span class="section-count">${list.length}</span></div>`;
+    html += `<div class="tenant-list" id="tenantList">`;
+    list.forEach(t => {
+      const status = getStatus(t);
+      html += `
+        <div class="tenant-card ${status}" data-id="${t.id}">
+          <div class="tenant-avatar ${status}">${initials(t.name)}</div>
+          <div class="tenant-info">
+            <div class="tenant-name">${escapeHtml(t.name)}${getUrgencyChip(t)}</div>
+            <div class="tenant-sub">${escapeHtml(getSubtext(t))}</div>
+          </div>
+          <div class="tenant-status ${status}">${getStatusLabel(t)}</div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+  }
+  html += `<div style="height: 20px"></div>`;
+  return html;
+}
+
+function bindHomeEvents() {
+  document.querySelectorAll('.stat-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const f = btn.dataset.filter;
+      state.filter = state.filter === f ? 'all' : f;
+      render();
+    });
+  });
+  const emptyAdd = document.getElementById('emptyAdd');
+  if (emptyAdd) emptyAdd.addEventListener('click', openAddTenant);
+  document.querySelectorAll('.tenant-card').forEach(card => {
+    card.addEventListener('click', () => openTenantDetail(card.dataset.id));
+  });
+  const search = document.getElementById('searchInput');
+  if (search) {
+    search.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      const list = document.getElementById('tenantList');
+      if (!list) return;
+      list.querySelectorAll('.tenant-card').forEach(card => {
+        const t = state.tenants.find(x => x.id === card.dataset.id);
+        if (!t) return;
+        const match = (t.name || '').toLowerCase().includes(q) || (t.property || '').toLowerCase().includes(q) || (t.phone || '').includes(q);
+        card.style.display = match ? '' : 'none';
+      });
+    });
+  }
+  const banner = document.getElementById('alertBanner');
+  if (banner) banner.addEventListener('click', () => switchView('alerts'));
+  const lowBal = document.getElementById('lowBalanceBanner');
+  if (lowBal) lowBal.addEventListener('click', () => toast('Contact: oladipobright12@gmail.com'));
+}
+
+// ===== ALERTS =====
+function renderAlerts() {
+  const alerts = getAllAlerts();
+  const settings = getReminderSettings();
+  const enabled = settings.enabled !== false;
+
+  let html = `<div class="detail-body">`;
+
+  html += `
+    <div style="background: linear-gradient(160deg, #0b1220 0%, #1a2536 100%); color: white; border-radius: 20px; padding: 22px; margin-bottom: 20px;">
+      <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">Auto-reminder</div>
+      <div style="font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px;">
+        ${enabled ? (alerts.length > 0 ? alerts.length + ' alert' + (alerts.length > 1 ? 's' : '') : 'All clear ✅') : 'Paused ⏸'}
+      </div>
+      <div style="font-size: 13px; color: rgba(255,255,255,0.6); line-height: 1.5;">
+        ${enabled ? 'App dey check your tenants automatically and alert you when rent dey due or overdue.' : 'Auto-reminder dey off.'}
+      </div>
+    </div>
+  `;
+
+  if (!enabled) {
+    html += `<button class="btn btn-primary btn-block" id="enableReminders" style="margin-bottom: 20px;">🔔 Turn on auto-reminder</button>`;
+  }
+
+  if (enabled && alerts.length > 0) {
+    const groups = {
+      critical: { title: '🚨 Critical', items: [] },
+      overdue: { title: '🔴 Overdue', items: [] },
+      'due-today': { title: '🟠 Due today', items: [] },
+      'due-soon': { title: '🟡 Due soon', items: [] },
+      upcoming: { title: '🔵 Upcoming', items: [] },
+    };
+    alerts.forEach(({ tenant, alert }) => { if (groups[alert.level]) groups[alert.level].items.push({ tenant, alert }); });
+
+    for (const [key, group] of Object.entries(groups)) {
+      if (group.items.length === 0) continue;
+      html += `<div class="section-label" style="padding-left: 0; padding-right: 0;">${group.title} <span class="section-count">${group.items.length}</span></div>`;
+      group.items.forEach(({ tenant, alert }) => {
+        const balance = getBalance(tenant);
+        let sub = '';
+        if (alert.level === 'critical') sub = `${alert.days} days overdue · ${fmt.naira(balance)}`;
+        else if (alert.level === 'overdue') sub = `${alert.days}d overdue · ${fmt.naira(balance)}`;
+        else if (alert.level === 'due-today') sub = `Due today · ${fmt.naira(balance)}`;
+        else sub = `Due in ${alert.days}d · ${fmt.naira(balance)}`;
+        const icons = { critical: '🚨', overdue: '🔴', 'due-today': '🟠', 'due-soon': '🟡', upcoming: '🔵' };
+        const actions = { critical: 'Urgent', overdue: 'Remind', 'due-today': 'Remind', 'due-soon': 'Soon', upcoming: 'View' };
+        html += `
+          <div class="alert-card ${alert.level}" data-alert-id="${tenant.id}">
+            <div class="alert-level-icon">${icons[alert.level]}</div>
+            <div class="alert-body">
+              <div class="alert-title">${escapeHtml(tenant.name)}</div>
+              <div class="alert-sub">${escapeHtml(sub)}</div>
+            </div>
+            <div class="alert-action">${actions[alert.level]}</div>
+          </div>
+        `;
+      });
+    }
+    html += `
+      <div style="margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <button class="btn btn-dark" id="remindAllBtn">💬 WhatsApp all</button>
+        <button class="btn btn-primary" id="bulkSmsBtn">📱 Bulk SMS</button>
+      </div>
+    `;
+  } else if (enabled && alerts.length === 0) {
+    html += `
+      <div class="empty" style="padding: 40px 20px;">
+        <div class="empty-icon">✅</div>
+        <div class="empty-title">Everything dey okay</div>
+        <p class="empty-desc">No rent dey due or overdue right now.</p>
+      </div>
+    `;
+  }
+  html += `<div style="height: 40px;"></div></div>`;
+  return html;
+}
+
+function bindAlertsEvents() {
+  document.querySelectorAll('[data-alert-id]').forEach(card => {
+    card.addEventListener('click', () => openTenantDetail(card.dataset.alertId));
+  });
+  const enableBtn = document.getElementById('enableReminders');
+  if (enableBtn) enableBtn.addEventListener('click', async () => {
+    const s = getReminderSettings(); s.enabled = true; saveReminderSettings(s);
+    await requestNotificationPermission();
+    toast('Auto-reminder on');
+    checkReminders({ showSystem: true });
+    render();
+  });
+  const remindAll = document.getElementById('remindAllBtn');
+  if (remindAll) remindAll.addEventListener('click', async () => {
+    const overdue = state.tenants.filter(t => { const a = getAlertLevel(t); return a && ['overdue','critical','due-today'].includes(a.level); });
+    if (overdue.length === 0) { toast('No one to remind'); return; }
+    if (!confirm(`Send WhatsApp to ${overdue.length} tenant${overdue.length > 1 ? 's' : ''}?`)) return;
+    for (const t of overdue.slice(0, 5)) { await sendQuickReminder(t); await new Promise(r => setTimeout(r, 800)); }
+    if (overdue.length > 5) toast(`Sent to first 5. ${overdue.length - 5} remain.`);
+    else toast('Reminders sent');
+  });
+  const bulkSmsBtn = document.getElementById('bulkSmsBtn');
+  if (bulkSmsBtn) bulkSmsBtn.addEventListener('click', openBulkReminder);
+}
+
+async function sendQuickReminder(t) {
+  const phone = (t.phone || '').replace(/\D/g, '');
+  if (!phone) return;
+  let clean = phone;
+  if (clean.startsWith('0')) clean = '234' + clean.slice(1);
+  else if (!clean.startsWith('234')) clean = '234' + clean;
+  const agentName = localStorage.getItem(AGENT_NAME_KEY) || 'Your agent';
+  const balance = getBalance(t);
+  const msg = `Good day ${t.name}. Friendly reminder: your rent for ${t.property} is due on ${t.dueDate ? fmt.date(t.dueDate) : 'soon'}. Outstanding: ${fmt.naira(balance)}. Kindly pay. — ${agentName}`;
+  window.open(`https://wa.me/${clean}?text=${encodeURIComponent(msg)}`, '_blank');
+  if (!t.reminders) t.reminders = [];
+  t.reminders.push({ id: 'r_' + Date.now(), channel: 'WhatsApp', date: new Date().toISOString() });
+  await saveTenant(t);
+}
+
+// ===== REPORTS =====
+function renderReports() {
+  const tenants = state.tenants;
+  const totalDue = tenants.reduce((s, t) => s + getTotalDue(t), 0);
+  const totalPaid = tenants.reduce((s, t) => s + getPaidTotal(t), 0);
+  const totalBalance = totalDue - totalPaid;
+  const redCount = tenants.filter(t => getStatus(t) === 'red').length;
+  const yellowCount = tenants.filter(t => getStatus(t) === 'yellow').length;
+  const greenCount = tenants.filter(t => getStatus(t) === 'green').length;
+
+  let html = `<div class="detail-body">`;
+  html += `
+    <div class="report-card" style="background: linear-gradient(160deg, #0b1220 0%, #1a2536 100%); color: white; border: none;">
+      <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">Total expected</div>
+      <div style="font-size: 32px; font-weight: 800; letter-spacing: -1px; margin-bottom: 20px;">${fmt.naira(totalDue)}</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div><div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.5); margin-bottom: 4px;">Collected</div>
+        <div style="font-size: 18px; font-weight: 800; color: #86efac; letter-spacing: -0.5px;">${fmt.naira(totalPaid)}</div></div>
+        <div><div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: rgba(255,255,255,0.5); margin-bottom: 4px;">Outstanding</div>
+        <div style="font-size: 18px; font-weight: 800; color: #fca5a5; letter-spacing: -0.5px;">${fmt.naira(totalBalance)}</div></div>
+      </div>
+    </div>
+    <div class="section-label" style="padding-left: 0; padding-right: 0;">Breakdown <span class="section-count">${tenants.length} total</span></div>
+    <div class="report-card">
+      <div class="report-row"><span class="report-row-label">🔴 Owing</span><span class="report-row-value red">${redCount} tenant${redCount !== 1 ? 's' : ''}</span></div>
+      <div class="report-row"><span class="report-row-label">🟡 Part payment</span><span class="report-row-value" style="color: #a16207;">${yellowCount} tenant${yellowCount !== 1 ? 's' : ''}</span></div>
+      <div class="report-row"><span class="report-row-label">🟢 Fully paid</span><span class="report-row-value green">${greenCount} tenant${greenCount !== 1 ? 's' : ''}</span></div>
+    </div>
+  `;
+  const owing = tenants.map(t => ({ t, bal: getBalance(t) })).filter(x => x.bal > 0).sort((a, b) => b.bal - a.bal).slice(0, 5);
+  if (owing.length > 0) {
+    html += `<div class="section-label" style="padding-left: 0; padding-right: 0;">Top balances</div>`;
+    owing.forEach(({ t, bal }) => {
+      const s = getStatus(t);
+      html += `<div class="tenant-card ${s}" data-report-id="${t.id}" style="margin-bottom: 8px;">
+        <div class="tenant-avatar ${s}">${initials(t.name)}</div>
+        <div class="tenant-info"><div class="tenant-name">${escapeHtml(t.name)}</div><div class="tenant-sub">Balance remaining</div></div>
+        <div style="font-size: 14px; font-weight: 800; color: var(--red-dark);">${fmt.shortNaira(bal)}</div></div>`;
+    });
+  }
+  html += `<div style="height: 40px"></div></div>`;
+  return html;
+}
+
+function bindReportsEvents() {
+  document.querySelectorAll('[data-report-id]').forEach(card => {
+    card.addEventListener('click', () => openTenantDetail(card.dataset.reportId));
+  });
+}
+
+// ===== SETTINGS =====
+function renderSettings() {
+  const balStatus = getBalanceStatus(cachedBalance?.amount ?? null);
+  const enabled = getReminderSettings().enabled !== false;
+  const daysBefore = getReminderSettings().daysBefore || 14;
+  const agentNameSet = localStorage.getItem(AGENT_NAME_KEY);
+
+  return `
+    <div class="detail-body">
+      ${useCloud && currentAgent ? `
+      <div class="settings-group-title">SMS Credits</div>
+      <div class="settings-group">
+        <div class="settings-row" id="refreshBalanceBtn">
+          <div class="settings-icon" style="background: ${balStatus.level === 'ok' ? 'var(--green-light)' : balStatus.level === 'empty' ? 'var(--red-light)' : 'var(--yellow-light)'}; color: ${balStatus.color};">💰</div>
+          <div class="settings-info">
+            <div class="settings-label">SMS credits</div>
+            <div class="settings-value">${cachedBalance ? `${cachedBalance.amount} SMS · ${balStatus.label}` : 'Tap to load balance'}</div>
+          </div>
+          <div class="settings-arrow">🔄</div>
+        </div>
+        ${(balStatus.level === 'empty' || balStatus.level === 'low' || balStatus.level === 'warning') ? `
+        <div class="settings-row" id="topupBtn" style="background: ${balStatus.level === 'empty' ? 'var(--red-soft)' : 'var(--yellow-soft)'};">
+          <div class="settings-icon">⚠️</div>
+          <div class="settings-info">
+            <div class="settings-label" style="color: ${balStatus.level === 'empty' ? 'var(--red-dark)' : 'var(--yellow-dark)'};">Top up now</div>
+            <div class="settings-value">Contact us to buy credits</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>` : ''}
+      </div>
+      ` : ''}
+
+      <div class="settings-group-title">Auto-reminder</div>
+      <div class="settings-group">
+        <div class="settings-row" id="setReminderToggle">
+          <div class="settings-icon">🔔</div>
+          <div class="settings-info">
+            <div class="settings-label">Auto-reminder</div>
+            <div class="settings-value">${enabled ? 'On — you dey get alerts' : 'Off — no alerts'}</div>
+          </div>
+          <div class="settings-arrow">${enabled ? '✓' : '›'}</div>
+        </div>
+        <div class="settings-row" id="setDaysBefore">
+          <div class="settings-icon">📅</div>
+          <div class="settings-info">
+            <div class="settings-label">Alert me before due</div>
+            <div class="settings-value">${daysBefore} days before rent due</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+        <div class="settings-row" id="testNotification">
+          <div class="settings-icon">🔔</div>
+          <div class="settings-info">
+            <div class="settings-label">Test notification</div>
+            <div class="settings-value">Send a test to your phone</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+      </div>
+
+      ${useCloud && currentAgent ? `
+      <div class="settings-group-title">SMS History</div>
+      <div class="settings-group">
+        <div class="settings-row" id="viewSmsHistory">
+          <div class="settings-icon">📨</div>
+          <div class="settings-info">
+            <div class="settings-label">Message history</div>
+            <div class="settings-value">See delivery status for all sent SMS</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+      </div>
+
+      <div class="settings-group-title">Agency</div>
+      <div class="settings-group">
+        ${currentAgent?.agency_id ? `
+        <div class="settings-row">
+          <div class="settings-icon">🏢</div>
+          <div class="settings-info">
+            <div class="settings-label">Agency mode</div>
+            <div class="settings-value">${currentAgent.role === 'owner' ? 'Owner' : 'Agent'}</div>
+          </div>
+          <div class="settings-arrow" style="color: var(--green);">✓</div>
+        </div>
+        <div class="settings-row" id="viewMembers">
+          <div class="settings-icon">👥</div>
+          <div class="settings-info">
+            <div class="settings-label">Manage members</div>
+            <div class="settings-value">See all agents in your agency</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+        ${currentAgent.role === 'agent' ? `
+        <div class="settings-row" id="leaveAgencyBtn">
+          <div class="settings-icon">🚪</div>
+          <div class="settings-info">
+            <div class="settings-label">Leave agency</div>
+            <div class="settings-value">Go back to solo mode</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>` : ''}
+        ` : `
+        <div class="settings-row" id="createAgencyBtn">
+          <div class="settings-icon">🏢</div>
+          <div class="settings-info">
+            <div class="settings-label">Create agency</div>
+            <div class="settings-value">Invite other agents to work together</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+        <div class="settings-row" id="joinAgencyBtn">
+          <div class="settings-icon">🔗</div>
+          <div class="settings-info">
+            <div class="settings-label">Join agency</div>
+            <div class="settings-value">Enter invite code from your boss</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+        `}
+      </div>
+      ` : ''}
+
+      <div class="settings-group-title">Account</div>
+      <div class="settings-group">
+        ${useCloud && currentAgent ? `
+        <div class="settings-row">
+          <div class="settings-icon">☁️</div>
+          <div class="settings-info">
+            <div class="settings-label">Cloud sync</div>
+            <div class="settings-value">
+              <span class="sync-dot ${syncStatus}" id="syncDot"></span>
+              <span id="syncText">${currentAgent.name} · ${prettyPhone(currentAgent.phone)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="settings-row" id="syncNowBtn">
+          <div class="settings-icon">🔄</div>
+          <div class="settings-info">
+            <div class="settings-label">Sync now</div>
+            <div class="settings-value" id="queueText">${getQueue().length === 0 ? 'Everything up to date' : getQueue().length + ' change(s) pending'}</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+        ` : ''}
+        <div class="settings-row" id="setAgentName">
+          <div class="settings-icon">✏️</div>
+          <div class="settings-info">
+            <div class="settings-label">Agent name</div>
+            <div class="settings-value">${escapeHtml(agentNameSet || 'Not set')}</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+        ${useCloud && currentAgent ? `
+        <div class="settings-row" id="signOutBtn">
+          <div class="settings-icon">🚪</div>
+          <div class="settings-info">
+            <div class="settings-label">Sign out</div>
+            <div class="settings-value">Log out of your account</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>` : `
+        <div class="settings-row" id="signInBtn">
+          <div class="settings-icon">🔐</div>
+          <div class="settings-info">
+            <div class="settings-label">Sign in to cloud</div>
+            <div class="settings-value">Sync across devices</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>`}
+      </div>
+
+      <div class="settings-group-title">Data</div>
+      <div class="settings-group">
+        <div class="settings-row" id="exportData">
+          <div class="settings-icon">📤</div>
+          <div class="settings-info">
+            <div class="settings-label">Export data</div>
+            <div class="settings-value">Download all tenants as JSON</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+        <div class="settings-row" id="importData">
+          <div class="settings-icon">📥</div>
+          <div class="settings-info">
+            <div class="settings-label">Import data</div>
+            <div class="settings-value">Restore from backup file</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+      </div>
+
+      <div class="settings-group-title">Danger zone</div>
+      <div class="settings-group">
+        <div class="settings-row settings-danger" id="clearAll">
+          <div class="settings-icon">🗑️</div>
+          <div class="settings-info">
+            <div class="settings-label">Clear all data</div>
+            <div class="settings-value">Delete every tenant and record</div>
+          </div>
+          <div class="settings-arrow">›</div>
+        </div>
+      </div>
+
+      <div style="text-align: center; padding: 24px 0; color: var(--muted); font-size: 13px;">
+        <div style="font-weight: 800; color: var(--ink); font-size: 15px; margin-bottom: 4px;">AgentPal</div>
+        <div>Version 2.0 · Built for Nigeria 🇳🇬</div>
+      </div>
+      <div style="height: 20px;"></div>
+    </div>
+  `;
+}
+
+function bindSettingsEvents() {
+  const refreshBalanceBtn = document.getElementById('refreshBalanceBtn');
+  if (refreshBalanceBtn) refreshBalanceBtn.addEventListener('click', async () => {
+    if (!useCloud || !currentAgent) { toast('Sign in to check balance'); return; }
+    toast('Checking...');
+    await fetchBalance(true);
+    render();
+    toast(cachedBalance ? 'Balance updated' : 'Could not fetch');
+  });
+
+  const topupBtn = document.getElementById('topupBtn');
+  if (topupBtn) topupBtn.addEventListener('click', () => toast('Contact: oladipobright12@gmail.com'));
+
+  const reminderToggle = document.getElementById('setReminderToggle');
+  if (reminderToggle) reminderToggle.addEventListener('click', async () => {
+    const s = getReminderSettings(); s.enabled = s.enabled === false; saveReminderSettings(s);
+    if (s.enabled) { const g = await requestNotificationPermission(); if (!g) toast('Enable notifications'); checkReminders({ showSystem: true }); }
+    toast(s.enabled ? 'Auto-reminder on' : 'Auto-reminder off');
+    render();
+  });
+
+  const daysBefore = document.getElementById('setDaysBefore');
+  if (daysBefore) daysBefore.addEventListener('click', () => {
+    const v = prompt('Alert me how many days before due?', getReminderSettings().daysBefore || 14);
+    if (v === null) return;
+    const n = parseInt(v, 10);
+    if (n > 0 && n <= 90) { const s = getReminderSettings(); s.daysBefore = n; saveReminderSettings(s); toast(`Alert set: ${n} days`); render(); }
+    else toast('Enter 1-90');
+  });
+
+  const testNotif = document.getElementById('testNotification');
+  if (testNotif) testNotif.addEventListener('click', async () => {
+    const g = await requestNotificationPermission();
+    if (g) {
+      try { new Notification('AgentPal test ✅', { body: 'Notifications dey work!' }); toast('Test sent'); }
+      catch (e) { toast('Could not send'); }
+    } else toast('Notifications blocked');
+  });
+
+  const viewSmsHistory = document.getElementById('viewSmsHistory');
+  if (viewSmsHistory) viewSmsHistory.addEventListener('click', async () => {
+    toast('Loading...');
+    const logs = await loadMessageLog(80);
+    if (logs.length === 0) {
+      openSheet('Message history', `
+        <div class="empty" style="padding: 40px 20px;">
+          <div class="empty-icon">📭</div>
+          <div class="empty-title">No messages yet</div>
+          <p class="empty-desc">SMS wey you send go show here.</p>
+        </div>
+      `);
+      return;
+    }
+    const html = `
+      <div style="margin-bottom: 16px; padding: 12px 14px; background: var(--bg-soft); border-radius: 12px; font-size: 13px; color: var(--muted);">
+        Last ${logs.length} message${logs.length > 1 ? 's' : ''}
+      </div>
+      ${logs.map(l => `
+        <div class="ledger-item">
+          <div class="ledger-dot" style="background: ${l.status === 'delivered' ? 'var(--green)' : (l.status === 'failed' || l.status === 'rejected') ? 'var(--red)' : l.status === 'sent' ? 'var(--yellow)' : 'var(--muted-2)'};"></div>
+          <div class="ledger-info">
+            <div class="ledger-title">${statusIcon(l.status)} ${escapeHtml(l.tenant_name || l.phone)}</div>
+            <div class="ledger-date">${escapeHtml(prettyPhone(l.phone))} · ${statusLabel(l.status)} · ${fmt.dateTime(l.created_at)}</div>
+          </div>
+        </div>
+      `).join('')}
+    `;
+    openSheet('Message history', html);
+  });
+
+  const createAgencyBtn = document.getElementById('createAgencyBtn');
+  if (createAgencyBtn) createAgencyBtn.addEventListener('click', async () => {
+    const name = prompt('Agency name?');
+    if (!name) return;
+    try {
+      const a = await createAgency(name);
+      toast('Created! Code: ' + a.invite_code);
+      await loadTenants(); render();
+    } catch (err) { toast(err.message); }
+  });
+
+  const joinAgencyBtn = document.getElementById('joinAgencyBtn');
+  if (joinAgencyBtn) joinAgencyBtn.addEventListener('click', async () => {
+    const code = prompt('Enter 6-character invite code:');
+    if (!code) return;
+    try {
+      const a = await joinAgency(code);
+      toast('Joined ' + a.name);
+      await loadTenants(); render();
+    } catch (err) { toast(err.message); }
+  });
+
+  const leaveAgencyBtn = document.getElementById('leaveAgencyBtn');
+  if (leaveAgencyBtn) leaveAgencyBtn.addEventListener('click', async () => {
+    if (!confirm('Leave this agency?')) return;
+    try { await leaveAgency(); await loadTenants(); toast('Left'); render(); }
+    catch (err) { toast(err.message); }
+  });
+
+  const viewMembers = document.getElementById('viewMembers');
+  if (viewMembers) viewMembers.addEventListener('click', async () => {
+    const members = await getAgencyMembers();
+    let inviteCode = '—';
+    try {
+      const { data } = await supabase.from('agencies').select('invite_code').eq('id', currentAgent.agency_id).single();
+      inviteCode = data?.invite_code || '—';
+    } catch {}
+    const html = `
+      <div style="margin-bottom: 16px; padding: 14px; background: var(--green-soft); border-radius: 12px;">
+        <div style="font-size: 12px; color: var(--green-dark); font-weight: 700; text-transform: uppercase;">Invite code</div>
+        <div style="font-size: 26px; font-weight: 800; letter-spacing: 4px; color: var(--green-dark); margin-top: 4px;">${inviteCode}</div>
+        <div style="font-size: 12px; color: var(--muted); margin-top: 6px;">Share with agents you want to join.</div>
+      </div>
+      ${members.map(m => `
+        <div class="ledger-item" style="margin-bottom: 8px;">
+          <div class="ledger-dot" style="background: var(--green);"></div>
+          <div class="ledger-info">
+            <div class="ledger-title">${escapeHtml(m.name)} ${m.id === currentAgent.id ? '(you)' : ''}</div>
+            <div class="ledger-date">${escapeHtml(prettyPhone(m.phone))} · ${m.role}</div>
+          </div>
+          ${currentAgent.role === 'owner' && m.id !== currentAgent.id ? `<button class="btn btn-sm btn-danger" data-remove="${m.id}" style="padding: 6px 12px; font-size: 12px;">Remove</button>` : ''}
+        </div>
+      `).join('')}
+    `;
+    openSheet('Agency members', html);
+    setTimeout(() => {
+      document.querySelectorAll('[data-remove]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Remove this agent?')) return;
+          try { await removeMember(btn.dataset.remove); closeSheet(); toast('Removed'); await loadTenants(); render(); }
+          catch (err) { toast(err.message); }
+        });
+      });
+    }, 0);
+  });
+
+  const syncNowBtn = document.getElementById('syncNowBtn');
+  if (syncNowBtn) syncNowBtn.addEventListener('click', manualSync);
+
+  const setAgentName = document.getElementById('setAgentName');
+  if (setAgentName) setAgentName.addEventListener('click', openSetAgentName);
+
+  const signOutBtn = document.getElementById('signOutBtn');
+  if (signOutBtn) signOutBtn.addEventListener('click', () => {
+    if (!confirm('Sign out? Your data go remain safe for cloud.')) return;
+    setSession(null); currentAgent = null; useCloud = false;
+    state.tenants = []; saveData();
+    appInitialized = false;
+    document.getElementById('appHeader').style.display = 'none';
+    document.getElementById('bottomNav').style.display = 'none';
+    document.getElementById('fab').classList.add('hide');
+    document.getElementById('appMain').innerHTML = '';
+    showAuthScreen('signin');
+  });
+
+  const signInBtn = document.getElementById('signInBtn');
+  if (signInBtn) signInBtn.addEventListener('click', () => showAuthScreen('signin'));
+
+  const exportBtn = document.getElementById('exportData');
+  if (exportBtn) exportBtn.addEventListener('click', exportData);
+
+  const importBtn = document.getElementById('importData');
+  if (importBtn) importBtn.addEventListener('click', importDataFn);
+
+  const clearAll = document.getElementById('clearAll');
+  if (clearAll) clearAll.addEventListener('click', () => {
+    if (confirm('Delete ALL tenants? Cannot be undone.')) {
+      state.tenants = []; saveData(); toast('Cleared'); render();
+    }
+  });
+}
+
+// ===== TENANT DETAIL =====
+function openTenantDetail(id) {
+  state.currentTenantId = id;
+  state.currentView = 'tenant';
+  render();
+  const main = document.getElementById('appMain');
+  if (main) main.scrollTop = 0;
+}
+
+function renderTenantDetail() {
+  const t = state.tenants.find(x => x.id === state.currentTenantId);
+  if (!t) { state.currentView = 'home'; render(); return ''; }
+
+  const status = getStatus(t);
+  const paid = getPaidTotal(t);
+  const due = getTotalDue(t);
+  const balance = getBalance(t);
+
+  const ledger = [];
+  (t.payments || []).forEach(p => ledger.push({ type: 'paid', date: p.date, title: `Payment — ${p.method || 'Cash'}`, amount: p.amount }));
+  (t.reminders || []).forEach(r => ledger.push({ type: 'remind', date: r.date, title: `Reminder sent via ${r.channel || 'WhatsApp'}`, amount: null }));
+  ledger.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  let html = `
+    <div class="detail-hero">
+      <button class="detail-back" id="detailBack">←</button>
+      <div class="detail-avatar ${status}">${initials(t.name)}</div>
+      <div class="detail-name">${escapeHtml(t.name)}</div>
+      <div class="detail-property">${escapeHtml(t.property || 'No property set')}</div>
+      <div class="detail-amounts">
+        <div><div class="detail-amount-label">Paid</div><div class="detail-amount-value green">${fmt.naira(paid)}</div></div>
+        <div><div class="detail-amount-label">Balance</div><div class="detail-amount-value ${balance > 0 ? 'red' : 'green'}">${fmt.naira(balance)}</div></div>
+      </div>
+    </div>
+    <div class="detail-body">
+      <div class="action-row">
+        <button class="action-btn green" id="actPay">
+          <span class="action-icon">💰</span><span class="action-title">Record payment</span><span class="action-sub">Cash, transfer, POS</span>
+        </button>
+        <button class="action-btn blue" id="actRemind">
+          <span class="action-icon">💬</span><span class="action-title">Send reminder</span><span class="action-sub">WhatsApp or SMS</span>
+        </button>
+        <button class="action-btn purple" id="actReceipt">
+          <span class="action-icon">🧾</span><span class="action-title">Receipt</span><span class="action-sub">Share or screenshot</span>
+        </button>
+        <button class="action-btn" id="actReport" style="border-color: var(--border); background: var(--card);">
+          <span class="action-icon">📊</span><span class="action-title">Landlord report</span><span class="action-sub">One tap, ready</span>
+        </button>
+      </div>
+      <div class="section-label" style="padding-left: 0; padding-right: 0;">Tenant info</div>
+      <div class="report-card" style="padding: 6px 18px;">
+        <div class="report-row"><span class="report-row-label">Phone</span><span class="report-row-value">${escapeHtml(t.phone || '—')}</span></div>
+        <div class="report-row"><span class="report-row-label">Rent amount</span><span class="report-row-value">${fmt.naira(t.rentAmount)}</span></div>
+        <div class="report-row"><span class="report-row-label">Years covered</span><span class="report-row-value">${t.yearsCovered || 1} year${(t.yearsCovered || 1) > 1 ? 's' : ''}</span></div>
+        <div class="report-row"><span class="report-row-label">Total due</span><span class="report-row-value">${fmt.naira(due)}</span></div>
+        <div class="report-row"><span class="report-row-label">Due date</span><span class="report-row-value">${t.dueDate ? fmt.date(t.dueDate) : '—'}</span></div>
+        ${t.landlord ? `<div class="report-row"><span class="report-row-label">Landlord</span><span class="report-row-value">${escapeHtml(t.landlord)}</span></div>` : ''}
+      </div>
+      <div class="section-label" style="padding-left: 0; padding-right: 0;">Ledger <span class="section-count">${ledger.length} record${ledger.length !== 1 ? 's' : ''}</span></div>
+  `;
+
+  if (ledger.length === 0) {
+    html += `<div style="text-align: center; padding: 30px 20px; color: var(--muted); font-size: 14px;">No records yet.</div>`;
+  } else {
+    ledger.forEach(item => {
+      html += `
+        <div class="ledger-item">
+          <div class="ledger-dot ${item.type}"></div>
+          <div class="ledger-info">
+            <div class="ledger-title">${escapeHtml(item.title)}</div>
+            <div class="ledger-date">${fmt.dateTime(item.date)}</div>
+          </div>
+          ${item.amount ? `<div class="ledger-amount paid">+${fmt.naira(item.amount)}</div>` : ''}
+        </div>
+      `;
+    });
+  }
+  html += `<div style="height: 40px;"></div></div>`;
+  return html;
+}
+
+function bindTenantDetailEvents() {
+  const back = document.getElementById('detailBack');
+  if (back) back.addEventListener('click', () => { state.currentView = 'home'; state.currentTenantId = null; render(); });
+  const pay = document.getElementById('actPay');
+  if (pay) pay.addEventListener('click', () => openRecordPayment(state.currentTenantId));
+  const remind = document.getElementById('actRemind');
+  if (remind) remind.addEventListener('click', () => openSendReminder(state.currentTenantId));
+  const receipt = document.getElementById('actReceipt');
+  if (receipt) receipt.addEventListener('click', () => openReceipt(state.currentTenantId));
+  const report = document.getElementById('actReport');
+  if (report) report.addEventListener('click', () => openLandlordReport(state.currentTenantId));
+}
+
+// ===== SHEET =====
+function openSheet(title, bodyHtml) {
+  document.getElementById('sheetTitle').textContent = title;
+  document.getElementById('sheetBody').innerHTML = bodyHtml;
+  document.getElementById('backdrop').classList.add('show');
+  document.getElementById('sheet').classList.add('show');
+}
+function closeSheet() {
+  document.getElementById('backdrop').classList.remove('show');
+  document.getElementById('sheet').classList.remove('show');
+}
+document.getElementById('sheetClose').addEventListener('click', closeSheet);
+document.getElementById('backdrop').addEventListener('click', closeSheet);
+
+// ===== ADD/EDIT TENANT =====
+function openAddTenant() { openTenantForm(null); }
+function openEditTenant(id) { openTenantForm(id); }
+
+function openTenantForm(id) {
+  const isEdit = !!id;
+  const t = isEdit ? state.tenants.find(x => x.id === id) : null;
+
+  const html = `
+    <form id="tenantForm" novalidate>
+      <div class="field">
+        <label class="field-label">Tenant name <span class="req">*</span></label>
+        <input type="text" class="input" name="name" required placeholder="e.g. Musa Ibrahim" value="${t ? escapeHtml(t.name || '') : ''}">
+      </div>
+      <div class="field">
+        <label class="field-label">Phone number</label>
+        <input type="tel" class="input" name="phone" placeholder="e.g. 08012345678" value="${t ? escapeHtml(t.phone || '') : ''}">
+      </div>
+      <div class="field">
+        <label class="field-label">Property / Address <span class="req">*</span></label>
+        <input type="text" class="input" name="property" required placeholder="e.g. 12 Admiralty Way, Lekki" value="${t ? escapeHtml(t.property || '') : ''}">
+      </div>
+      <div class="field">
+        <label class="field-label">Landlord name</label>
+        <input type="text" class="input" name="landlord" placeholder="e.g. Mr Adebayo Johnson" value="${t ? escapeHtml(t.landlord || '') : ''}">
+      </div>
+      <div class="field">
+        <label class="field-label">Rent amount <span class="req">*</span></label>
+        <div class="input-prefix">
+          <span class="prefix">₦</span>
+          <input type="number" class="input" name="rentAmount" required placeholder="500000" inputmode="numeric" value="${t ? t.rentAmount || '' : ''}">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Years covered</label>
+        <select class="select" name="yearsCovered">
+          ${[1,2,3,4,5,10].map(y => `<option value="${y}" ${t && t.yearsCovered === y ? 'selected' : ''}>${y} year${y > 1 ? 's' : ''}</option>`).join('')}
+        </select>
+        <div class="field-hint">If tenant paid advance for 10 years, pick 10.</div>
+      </div>
+      <div class="field">
+        <label class="field-label">Next due date <span class="req">*</span></label>
+        <input type="date" class="input" name="dueDate" required value="${t ? t.dueDate || '' : ''}">
+      </div>
+      <div style="height: 8px;"></div>
+      <button type="submit" class="btn btn-primary btn-block">${isEdit ? 'Save changes' : 'Add tenant'}</button>
+      ${isEdit ? `<button type="button" class="btn btn-danger btn-block" id="deleteTenantBtn" style="margin-top: 10px;">Delete tenant</button>` : ''}
+    </form>
+  `;
+
+  openSheet(isEdit ? 'Edit tenant' : 'Add new tenant', html);
+
+  const form = document.getElementById('tenantForm');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const data = {
+      name: fd.get('name').trim(),
+      phone: fd.get('phone').trim(),
+      property: fd.get('property').trim(),
+      landlord: fd.get('landlord').trim(),
+      rentAmount: Number(fd.get('rentAmount')),
+      yearsCovered: Number(fd.get('yearsCovered')),
+      dueDate: fd.get('dueDate'),
+    };
+    if (!data.name || !data.property || !data.rentAmount || !data.dueDate) { toast('Fill all required'); return; }
+
+    let savedTenant;
+    if (isEdit) {
+      Object.assign(t, data);
+      savedTenant = t;
+      toast('Tenant updated');
+    } else {
+      savedTenant = {
+        id: 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        ...data, payments: [], reminders: [],
+        createdBy: currentAgent?.id || null,
+        createdAt: new Date().toISOString(),
+      };
+      state.tenants.push(savedTenant);
+      toast('Tenant added');
+    }
+    await saveTenant(savedTenant);
+
+    if (!isEdit && state.tenants.length === 1) {
+      setTimeout(async () => {
+        if ('Notification' in window && Notification.permission === 'default') {
+          const g = await requestNotificationPermission();
+          if (g) { toast('Auto-reminder on!'); checkReminders({ showSystem: true }); }
+        }
+      }, 800);
+    }
+
+    closeSheet();
+    render();
+  });
+
+  const delBtn = document.getElementById('deleteTenantBtn');
+  if (delBtn) delBtn.addEventListener('click', async () => {
+    if (!confirm(`Delete ${t.name}?`)) return;
+    state.tenants = state.tenants.filter(x => x.id !== t.id);
+    queueDeleteTenant(t.id);
+    saveData();
+    closeSheet();
+    state.currentView = 'home'; state.currentTenantId = null;
+    toast('Deleted'); render();
+  });
+}
+
+// ===== RECORD PAYMENT =====
+function openRecordPayment(tenantId) {
+  const t = state.tenants.find(x => x.id === tenantId);
+  if (!t) return;
+  const balance = getBalance(t);
+
+  const html = `
+    <form id="payForm" novalidate>
+      <div style="background: var(--bg-soft); border-radius: 14px; padding: 16px; margin-bottom: 20px; text-align: center;">
+        <div style="font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Balance remaining</div>
+        <div style="font-size: 26px; font-weight: 800; letter-spacing: -0.8px; color: ${balance > 0 ? 'var(--red-dark)' : 'var(--green-dark)'};">${fmt.naira(balance)}</div>
+      </div>
+      <div class="field">
+        <label class="field-label">Payment type</label>
+        <div class="toggle-row">
+          <button type="button" class="toggle-btn active" data-type="full">Full payment</button>
+          <button type="button" class="toggle-btn" data-type="part">Part payment</button>
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Amount received <span class="req">*</span></label>
+        <div class="input-prefix"><span class="prefix">₦</span>
+          <input type="number" class="input" name="amount" required placeholder="0" inputmode="numeric" value="${balance > 0 ? balance : ''}">
+        </div>
+      </div>
+      <div class="field">
+        <label class="field-label">Payment method</label>
+        <select class="select" name="method">
+          <option>Cash</option><option>Bank transfer</option><option>POS</option>
+          <option>USSD</option><option>Cheque</option><option>Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Note (optional)</label>
+        <input type="text" class="input" name="note" placeholder="e.g. First installment">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Record payment</button>
+    </form>
+  `;
+
+  openSheet('Record payment', html);
+
+  let payType = 'full';
+  document.querySelectorAll('#sheet .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#sheet .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      payType = btn.dataset.type;
+      const amountInput = document.querySelector('#payForm input[name="amount"]');
+      if (payType === 'full') amountInput.value = balance;
+      else { amountInput.value = ''; amountInput.focus(); }
+    });
+  });
+
+  const form = document.getElementById('payForm');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const amount = Number(fd.get('amount'));
+    if (!amount || amount <= 0) { toast('Enter valid amount'); return; }
+    if (!t.payments) t.payments = [];
+    t.payments.push({
+      id: 'p_' + Date.now(), amount,
+      method: fd.get('method'), note: fd.get('note').trim(),
+      date: new Date().toISOString(),
+    });
+    await saveTenant(t);
+    closeSheet();
+    toast(`${fmt.naira(amount)} recorded`);
+    render();
+  });
+}
+
+// ===== SEND REMINDER =====
+function openSendReminder(tenantId) {
+  const t = state.tenants.find(x => x.id === tenantId);
+  if (!t) return;
+  const balance = getBalance(t);
+  const agentName = localStorage.getItem(AGENT_NAME_KEY) || 'Your agent';
+  const defaultMsg = `Good day ${t.name}. Friendly reminder: your rent for ${t.property} is due on ${t.dueDate ? fmt.date(t.dueDate) : 'soon'}.${balance > 0 ? ` Outstanding: ${fmt.naira(balance)}.` : ''} Kindly pay. — ${agentName}`;
+
+  const html = `
+    <div class="field">
+      <label class="field-label">Send via</label>
+      <div class="toggle-row">
+        <button type="button" class="toggle-btn active" data-channel="whatsapp">💬 WhatsApp</button>
+        <button type="button" class="toggle-btn" data-channel="sms">📱 SMS</button>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Message</label>
+      <textarea class="textarea" id="msgText" style="min-height: 130px;">${escapeHtml(defaultMsg)}</textarea>
+      <div class="field-hint">Edit am before you send if you want.</div>
+    </div>
+    <button type="button" class="btn btn-primary btn-block" id="sendBtn">Send via WhatsApp</button>
+  `;
+
+  openSheet('Send reminder', html);
+
+  let channel = 'whatsapp';
+  const msgText = document.getElementById('msgText');
+  const sendBtn = document.getElementById('sendBtn');
+
+  document.querySelectorAll('#sheet .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#sheet .toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      channel = btn.dataset.channel;
+      sendBtn.textContent = channel === 'whatsapp' ? 'Send via WhatsApp' : 'Send via SMS';
+    });
+  });
+
+  sendBtn.addEventListener('click', async () => {
+    const phone = (t.phone || '').replace(/\D/g, '');
+    if (!phone) { toast('Add tenant phone number first'); return; }
+    let clean = phone;
+    if (clean.startsWith('0')) clean = '234' + clean.slice(1);
+    else if (!clean.startsWith('234')) clean = '234' + clean;
+    const message = encodeURIComponent(msgText.value);
+
+    if (channel === 'whatsapp') {
+      window.open(`https://wa.me/${clean}?text=${message}`, '_blank');
+    } else {
+      if (useCloud && currentAgent && supabase) {
+        try {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+            body: JSON.stringify({
+              agentId: currentAgent.id, agencyId: currentAgent.agency_id || null, channel: 'dnd',
+              recipients: [{ tenantId: t.id, tenantName: t.name, phone: clean, message: msgText.value }],
+            }),
+          });
+          const data = await res.json();
+          if (!data.ok) throw new Error(data.error);
+          toast('SMS sent');
+        } catch (err) { toast('SMS failed: ' + err.message); }
+      } else {
+        window.open(`sms:${t.phone}?body=${message}`, '_blank');
+      }
+    }
+
+    if (!t.reminders) t.reminders = [];
+    t.reminders.push({ id: 'r_' + Date.now(), channel: channel === 'whatsapp' ? 'WhatsApp' : 'SMS', date: new Date().toISOString() });
+    await saveTenant(t);
+    closeSheet(); toast('Reminder logged'); render();
+  });
+}
+
+// ===== RECEIPT =====
+function openReceipt(tenantId) {
+  const t = state.tenants.find(x => x.id === tenantId);
+  if (!t) return;
+  const paid = getPaidTotal(t);
+  const balance = getBalance(t);
+  const agentName = localStorage.getItem(AGENT_NAME_KEY) || 'AgentPal Agent';
+
+  const html = `
+    <div class="report-card">
+      <div class="report-brand">
+        <div>
+          <div class="report-brand-name">${escapeHtml(agentName)}</div>
+          <div class="report-brand-sub">Rent Payment Receipt</div>
+        </div>
+        <div class="report-badge">RECEIPT</div>
+      </div>
+      <div class="report-row"><span class="report-row-label">Date</span><span class="report-row-value">${fmt.date(new Date())}</span></div>
+      <div class="report-row"><span class="report-row-label">Tenant</span><span class="report-row-value">${escapeHtml(t.name)}</span></div>
+      <div class="report-row"><span class="report-row-label">Property</span><span class="report-row-value">${escapeHtml(t.property || '—')}</span></div>
+      <div class="report-row"><span class="report-row-label">Total due</span><span class="report-row-value">${fmt.naira(getTotalDue(t))}</span></div>
+      <div class="report-row"><span class="report-row-label">Total paid</span><span class="report-row-value green big">${fmt.naira(paid)}</span></div>
+      <div class="report-row"><span class="report-row-label">Balance</span><span class="report-row-value ${balance > 0 ? 'red' : 'green'}">${fmt.naira(balance)}</span></div>
+      <div class="report-status ${balance > 0 ? 'yellow' : 'green'}">${balance > 0 ? '🟡 Part payment — balance pending' : '🟢 Fully paid — thank you'}</div>
+    </div>
+    <div class="row-flex" style="margin-top: 16px;">
+      <button class="btn btn-ghost" id="shareReceipt">📤 Share</button>
+      <button class="btn btn-ghost" id="screenshotHint">📸 Screenshot</button>
+    </div>
+  `;
+
+  openSheet('Payment receipt', html);
+
+  document.getElementById('shareReceipt').addEventListener('click', () => {
+    const text = `RECEIPT\n\nTenant: ${t.name}\nProperty: ${t.property}\nTotal due: ${fmt.naira(getTotalDue(t))}\nPaid: ${fmt.naira(paid)}\nBalance: ${fmt.naira(balance)}\n\nIssued: ${fmt.date(new Date())}\n— ${agentName}`;
+    if (navigator.share) navigator.share({ title: 'Receipt', text }).catch(() => {});
+    else { navigator.clipboard.writeText(text).then(() => toast('Copied')).catch(() => toast('Could not copy')); }
+  });
+
+  document.getElementById('screenshotHint').addEventListener('click', () => toast('Use phone screenshot'));
+}
+
+// ===== LANDLORD REPORT =====
+function openLandlordReport(tenantId) {
+  const t = state.tenants.find(x => x.id === tenantId);
+  if (!t) return;
+  const paid = getPaidTotal(t);
+  const balance = getBalance(t);
+  const status = getStatus(t);
+  const agentName = localStorage.getItem(AGENT_NAME_KEY) || 'AgentPal Agent';
+
+  const html = `
+    <div class="report-card">
+      <div class="report-brand">
+        <div><div class="report-brand-name">Rent Report</div><div class="report-brand-sub">${escapeHtml(t.property || '')}</div></div>
+        <div class="report-badge">LANDLORD</div>
+      </div>
+      <div class="report-row"><span class="report-row-label">Landlord</span><span class="report-row-value">${escapeHtml(t.landlord || '—')}</span></div>
+      <div class="report-row"><span class="report-row-label">Tenant</span><span class="report-row-value">${escapeHtml(t.name)}</span></div>
+      <div class="report-row"><span class="report-row-label">Annual rent</span><span class="report-row-value">${fmt.naira(t.rentAmount)}</span></div>
+      <div class="report-row"><span class="report-row-label">Total due</span><span class="report-row-value">${fmt.naira(getTotalDue(t))}</span></div>
+      <div class="report-row"><span class="report-row-label">Amount paid</span><span class="report-row-value green big">${fmt.naira(paid)}</span></div>
+      <div class="report-row"><span class="report-row-label">Balance</span><span class="report-row-value ${balance > 0 ? 'red' : 'green'} big">${fmt.naira(balance)}</span></div>
+      <div class="report-row"><span class="report-row-label">Next due</span><span class="report-row-value">${t.dueDate ? fmt.date(t.dueDate) : '—'}</span></div>
+      <div class="report-status ${status}">${status === 'green' ? '🟢 Fully paid' : status === 'yellow' ? '🟡 Part payment' : '🔴 Owing'}</div>
+      <div style="margin-top: 18px; padding-top: 14px; border-top: 1.5px solid var(--border); font-size: 12px; color: var(--muted); text-align: center;">Prepared by ${escapeHtml(agentName)} · AgentPal</div>
+    </div>
+    <div class="row-flex" style="margin-top: 16px;">
+      <button class="btn btn-ghost" id="shareReport">📤 Share</button>
+      <button class="btn btn-primary" id="waReport">💬 Send landlord</button>
+    </div>
+  `;
+
+  openSheet('Landlord report', html);
+  const reportText = `RENT REPORT\n\nProperty: ${t.property}\nLandlord: ${t.landlord || '—'}\nTenant: ${t.name}\n\nAnnual rent: ${fmt.naira(t.rentAmount)}\nTotal due: ${fmt.naira(getTotalDue(t))}\nPaid: ${fmt.naira(paid)}\nBalance: ${fmt.naira(balance)}\nNext due: ${t.dueDate ? fmt.date(t.dueDate) : '—'}\n\nStatus: ${status === 'green' ? 'FULLY PAID' : status === 'yellow' ? 'PART PAYMENT' : 'OWING'}\n\n— ${agentName} · AgentPal`;
+
+  document.getElementById('shareReport').addEventListener('click', () => {
+    if (navigator.share) navigator.share({ title: 'Landlord Report', text: reportText }).catch(() => {});
+    else { navigator.clipboard.writeText(reportText).then(() => toast('Copied')).catch(() => toast('Could not copy')); }
+  });
+
+  document.getElementById('waReport').addEventListener('click', () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(reportText)}`, '_blank');
+  });
+}
+
+// ===== SET AGENT NAME =====
+function openSetAgentName() {
+  const current = localStorage.getItem(AGENT_NAME_KEY) || '';
+  const html = `
+    <form id="agentNameForm">
+      <div class="field">
+        <label class="field-label">Your name</label>
+        <input type="text" class="input" name="agentName" placeholder="e.g. Musa Ibrahim" value="${escapeHtml(current)}" autofocus>
+        <div class="field-hint">Show for receipts and landlord reports.</div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Save</button>
+    </form>
+  `;
+  openSheet('Set agent name', html);
+  document.getElementById('agentNameForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = new FormData(e.target).get('agentName').trim();
+    if (v) localStorage.setItem(AGENT_NAME_KEY, v);
+    else localStorage.removeItem(AGENT_NAME_KEY);
+    closeSheet(); toast('Name saved'); render();
+  });
+}
+
+// ===== EXPORT/IMPORT =====
+function exportData() {
+  const data = { exportedAt: new Date().toISOString(), tenants: state.tenants };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `agentpal-backup-${fmt.today()}.json`; a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup downloaded');
+}
+
+function importDataFn() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'application/json';
+  input.onchange = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        if (!parsed.tenants || !Array.isArray(parsed.tenants)) { toast('Invalid file'); return; }
+        if (confirm(`Import ${parsed.tenants.length} tenant(s)?`)) {
+          state.tenants = parsed.tenants;
+          saveData();
+          if (useCloud && currentAgent) { for (const t of state.tenants) await queueUpsertTenant(t); }
+          toast('Imported'); render();
+        }
+      } catch { toast('Could not read'); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ===== BULK REMINDER =====
+function openBulkReminder() {
+  const candidates = state.tenants.filter(t => {
+    const a = getAlertLevel(t);
+    return a && a.level !== 'upcoming' && (t.phone || '').trim();
+  });
+  if (candidates.length === 0) { toast('No overdue tenants with phone numbers'); return; }
+  if (!useCloud || !currentAgent || !supabase) { toast('Sign in to send bulk SMS'); return; }
+
+  const agentName = localStorage.getItem(AGENT_NAME_KEY) || 'Your agent';
+  const first = candidates[0];
+  const template = `Good day ${first.name}. Friendly reminder: your rent for ${first.property} is due on ${first.dueDate ? fmt.date(first.dueDate) : 'soon'}. Outstanding: ${fmt.naira(getBalance(first))}. Kindly pay. — ${agentName}`;
+
+  const html = `
+    <div class="field">
+      <label class="field-label">Select tenants (${candidates.length} eligible)</label>
+      <div style="max-height: 260px; overflow-y: auto; border: 1.5px solid var(--border); border-radius: 14px; padding: 8px; background: var(--bg-soft);">
+        ${candidates.map(t => {
+          const a = getAlertLevel(t);
+          const icons = { critical: '🚨', overdue: '🔴', 'due-today': '🟠', 'due-soon': '🟡' };
+          return `
+            <label style="display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; cursor: pointer;">
+              <input type="checkbox" checked data-tenant="${t.id}" style="width: 18px; height: 18px; accent-color: var(--green);">
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 13px; font-weight: 700;">${icons[a.level] || ''} ${escapeHtml(t.name)}</div>
+                <div style="font-size: 11.5px; color: var(--muted);">${escapeHtml(prettyPhone(normalizePhone(t.phone)))} · ${fmt.shortNaira(getBalance(t))}</div>
+              </div>
+            </label>
+          `;
+        }).join('')}
+      </div>
+      <div style="font-size: 12px; color: var(--muted); margin-top: 8px;">
+        <label style="display: flex; gap: 8px; align-items: center; cursor: pointer;">
+          <input type="checkbox" id="selectAll" checked style="width: 16px; height: 16px; accent-color: var(--green);">
+          <span>Select all</span>
+        </label>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Message</label>
+      <textarea class="textarea" id="bulkMsg" style="min-height: 110px;">${escapeHtml(template)}</textarea>
+    </div>
+    <div style="background: var(--yellow-soft); border: 1px solid var(--yellow-light); border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; color: var(--yellow-dark); font-weight: 600;">
+      💰 ~<span id="costEst">${candidates.length}</span> SMS credits
+      ${cachedBalance ? ` · Balance: ${cachedBalance.amount}` : ''}
+    </div>
+    <button type="button" class="btn btn-primary btn-block" id="sendBulkBtn">
+      Send to <span id="recipientCount">${candidates.length}</span> tenants
+    </button>
+  `;
+
+  openSheet('Bulk reminder', html);
+
+  const recipientCount = document.getElementById('recipientCount');
+  const costEst = document.getElementById('costEst');
+
+  function updateCount() {
+    const n = document.querySelectorAll('#sheet input[data-tenant]:checked').length;
+    recipientCount.textContent = n;
+    costEst.textContent = n;
+  }
+  document.querySelectorAll('#sheet input[data-tenant]').forEach(cb => cb.addEventListener('change', updateCount));
+
+  const selectAll = document.getElementById('selectAll');
+  selectAll.addEventListener('change', () => {
+    document.querySelectorAll('#sheet input[data-tenant]').forEach(cb => { cb.checked = selectAll.checked; });
+    updateCount();
+  });
+
+  document.getElementById('sendBulkBtn').addEventListener('click', async () => {
+    const selected = Array.from(document.querySelectorAll('#sheet input[data-tenant]:checked')).map(cb => cb.dataset.tenant);
+    if (selected.length === 0) { toast('Select at least one'); return; }
+
+    if (cachedBalance && selected.length > cachedBalance.amount) {
+      if (!confirm(`You need ${selected.length} credits but get ${cachedBalance.amount}. Continue anyway?`)) return;
+    } else {
+      if (!confirm(`Send to ${selected.length} tenants?`)) return;
+    }
+
+    const templateMsg = document.getElementById('bulkMsg').value;
+    const recipients = selected.map(id => {
+      const t = state.tenants.find(x => x.id === id);
+      let msg = templateMsg.replace(/^Good day \w+/i, `Good day ${t.name.split(' ')[0]}`);
+      return { tenantId: t.id, tenantName: t.name, phone: normalizePhone(t.phone), message: msg };
+    });
+
+    const btn = document.getElementById('sendBulkBtn');
+    btn.textContent = 'Sending...'; btn.disabled = true;
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({
+          agentId: currentAgent.id, agencyId: currentAgent.agency_id || null,
+          recipients, channel: 'dnd',
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+
+      recipients.forEach(r => {
+        const t = state.tenants.find(x => x.id === r.tenantId);
+        if (t) {
+          if (!t.reminders) t.reminders = [];
+          t.reminders.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), channel: 'SMS (bulk)', date: new Date().toISOString() });
+        }
+      });
+      saveData();
+
+      closeSheet();
+      showBulkResult(data);
+      fetchBalance(true).then(() => { if (state.currentView === 'settings') render(); });
+    } catch (err) {
+      toast(err.message || 'Bulk send failed');
+      btn.textContent = `Send to ${selected.length} tenants`;
+      btn.disabled = false;
+    }
+  });
+}
+
+function showBulkResult(data) {
+  const failed = (data.results || []).filter(r => !r.ok);
+  const html = `
+    <div style="text-align: center; padding: 12px 0 20px;">
+      <div style="font-size: 56px; margin-bottom: 12px;">${data.failed === 0 ? '✅' : '⚠️'}</div>
+      <div style="font-size: 22px; font-weight: 800; margin-bottom: 6px;">${data.success} of ${data.total} sent</div>
+      <div style="color: var(--muted); font-size: 14px;">${data.failed === 0 ? 'All messages don go out.' : `${data.failed} failed.`}</div>
+    </div>
+    ${failed.length > 0 ? `
+      <div class="section-label" style="padding-left: 0; padding-right: 0;">Failed</div>
+      ${failed.map(f => `
+        <div class="ledger-item">
+          <div class="ledger-dot" style="background: var(--red);"></div>
+          <div class="ledger-info">
+            <div class="ledger-title">${escapeHtml(f.phone)}</div>
+            <div class="ledger-date">${escapeHtml(f.error || 'Unknown')}</div>
+          </div>
+        </div>
+      `).join('')}
+    ` : ''}
+    <button class="btn btn-primary btn-block" style="margin-top: 16px;" id="bulkDoneBtn">Done</button>
+  `;
+  openSheet('Bulk send result', html);
+  setTimeout(() => document.getElementById('bulkDoneBtn')?.addEventListener('click', closeSheet), 0);
+}
+
+// ===== MANUAL SYNC =====
+async function manualSync() {
+  if (!isOnline) { toast('No network'); return; }
+  await processQueue();
+  if (useCloud && currentAgent) await loadTenants();
+  toast('Synced');
+  render();
+}
+
+// ===== VIEW SWITCHING =====
+function switchView(view) {
+  state.currentView = view;
+  state.currentTenantId = view === 'tenant' ? state.currentTenantId : null;
+  render();
+  const main = document.getElementById('appMain');
+  if (main) main.scrollTop = 0;
+}
+
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
+
+document.getElementById('fab').addEventListener('click', () => {
+  if (state.currentView === 'home') openAddTenant();
+});
+
+document.getElementById('headerBell').addEventListener('click', () => switchView('alerts'));
+
+document.getElementById('queueBadgeBtn').addEventListener('click', async () => {
+  const q = getQueue();
+  if (q.length === 0) { toast('Nothing to sync'); return; }
+  if (!confirm(`${q.length} change(s) queued. Sync now?`)) return;
+  await processQueue();
+});
+
+// ===== TOAST =====
+let toastTimeout;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toastText').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ===== AUTH SCREEN =====
+function showAuthScreen(mode) {
+  const screen = document.getElementById('authScreen');
+  screen.classList.remove('hide');
+  const signin = document.getElementById('signinForm');
+  const signup = document.getElementById('signupForm');
+  const forgot = document.getElementById('forgotForm');
+  const sub = document.getElementById('authSub');
+  const showSignupBtn = document.getElementById('showSignupBtn');
+  const showSigninBtn = document.getElementById('showSigninBtn');
+  const showForgotBtn = document.getElementById('showForgotBtn');
+  const switchDot1 = document.getElementById('switchDot1');
+  const switchDot2 = document.getElementById('switchDot2');
+
+  signin.style.display = 'none'; signup.style.display = 'none'; forgot.style.display = 'none';
+  showSignupBtn.style.display = 'none'; showSigninBtn.style.display = 'none';
+  showForgotBtn.style.display = 'none'; switchDot1.style.display = 'none'; switchDot2.style.display = 'none';
+
+  if (mode === 'signin') {
+    signin.style.display = 'block';
+    sub.textContent = 'Sign in to sync your ledger everywhere';
+    showSignupBtn.style.display = 'inline';
+    showForgotBtn.style.display = 'inline';
+    switchDot1.style.display = 'inline';
+    switchDot2.style.display = 'inline';
+  } else if (mode === 'signup') {
+    signup.style.display = 'block';
+    sub.textContent = 'Create your account. E free.';
+    showSigninBtn.style.display = 'inline';
+  } else if (mode === 'forgot') {
+    forgot.style.display = 'block';
+    sub.textContent = 'Reset your PIN via SMS';
+    showSigninBtn.style.display = 'inline';
+    document.getElementById('forgotStep1').style.display = 'block';
+    document.getElementById('forgotStep2').style.display = 'none';
+    document.getElementById('forgotStep3').style.display = 'none';
+    document.getElementById('forgotForm').reset();
+    otpPhone = ''; otpVerified = false;
+  }
+  hideAuthError();
+  hideAuthInfo();
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('authError');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = 'none'; }, 7000);
+}
+function hideAuthError() { document.getElementById('authError').style.display = 'none'; }
+function showAuthInfo(msg) {
+  const el = document.getElementById('authInfo');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+function hideAuthInfo() { document.getElementById('authInfo').style.display = 'none'; }
+
+function authDone() {
+  document.getElementById('authScreen').classList.add('hide');
+  document.getElementById('appHeader').style.display = 'flex';
+  document.getElementById('bottomNav').style.display = 'flex';
+  initMain();
+}
+
+document.getElementById('showSignupBtn').addEventListener('click', () => showAuthScreen('signup'));
+document.getElementById('showSigninBtn').addEventListener('click', () => showAuthScreen('signin'));
+document.getElementById('showForgotBtn').addEventListener('click', () => showAuthScreen('forgot'));
+
+document.getElementById('signinForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!supabase) { showAuthError('Cloud not configured. Use "Continue without account".'); return; }
+  const fd = new FormData(e.target);
+  const btn = e.target.querySelector('button[type="submit"]');
+  const orig = btn.textContent;
+  btn.textContent = 'Signing in...'; btn.disabled = true;
+  try {
+    await doSignin({ phone: fd.get('phone'), pin: fd.get('pin') });
+    await loadTenants();
+    authDone();
+  } catch (err) {
+    showAuthError(err.message || 'Something went wrong');
+    btn.textContent = orig; btn.disabled = false;
+  }
+});
+
+document.getElementById('signupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!supabase) { showAuthError('Cloud not configured. Use "Continue without account".'); return; }
+  const fd = new FormData(e.target);
+  const btn = e.target.querySelector('button[type="submit"]');
+  const orig = btn.textContent;
+  const name = (fd.get('name') || '').trim();
+  const phone = fd.get('phone');
+  const pin = fd.get('pin');
+  const pin2 = fd.get('pin2');
+
+  if (!name) return showAuthError('Enter your name');
+  if (!/^0?\d{10}$/.test(String(phone).replace(/\D/g, ''))) return showAuthError('Enter valid phone');
+  if (!/^\d{4}$/.test(pin)) return showAuthError('PIN must be 4 digits');
+  if (pin !== pin2) return showAuthError('PINs no match');
+
+  btn.textContent = 'Creating...'; btn.disabled = true;
+  try {
+    await doSignup({ name, phone, pin });
+    await loadTenants();
+    authDone();
+  } catch (err) {
+    showAuthError(err.message || 'Could not create');
+    btn.textContent = orig; btn.disabled = false;
+  }
+});
+
+document.getElementById('forgotSendBtn').addEventListener('click', async () => {
+  if (!supabase) { showAuthError('Cloud not configured'); return; }
+  const phone = document.querySelector('#forgotStep1 input[name="phone"]').value;
+  if (!phone) return showAuthError('Enter your phone');
+  const normalized = normalizePhone(phone);
+  if (normalized.length !== 13) return showAuthError('Enter valid phone');
+
+  const { data: agent } = await supabase.from('agents').select('id').eq('phone', normalized).maybeSingle();
+  if (!agent) return showAuthError('No account with this number');
+
+  const btn = document.getElementById('forgotSendBtn');
+  const orig = btn.textContent;
+  btn.textContent = 'Sending...'; btn.disabled = true;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ phone: normalized }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Could not send code');
+
+    otpPhone = normalized;
+    document.getElementById('forgotStep1').style.display = 'none';
+    document.getElementById('forgotStep2').style.display = 'block';
+    const sentVia = data.channel === 'whatsapp' ? 'WhatsApp' : 'SMS';
+    document.getElementById('otpPhoneHint').textContent = `Code sent to ${prettyPhone(normalized)} via ${sentVia}`;
+    showAuthInfo(`✅ Code sent via ${sentVia}!`);
+  } catch (err) {
+    showAuthError(err.message);
+  }
+  btn.textContent = orig; btn.disabled = false;
+});
+
+document.getElementById('forgotVerifyBtn').addEventListener('click', async () => {
+  const otp = document.querySelector('#forgotStep2 input[name="otp"]').value;
+  if (!/^\d{6}$/.test(otp)) return showAuthError('Enter 6-digit code');
+
+  const btn = document.getElementById('forgotVerifyBtn');
+  const orig = btn.textContent;
+  btn.textContent = 'Verifying...'; btn.disabled = true;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ phone: otpPhone, code: otp, action: 'verify' }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Wrong code');
+
+    otpVerified = true;
+    document.getElementById('forgotStep2').style.display = 'none';
+    document.getElementById('forgotStep3').style.display = 'block';
+    hideAuthError();
+  } catch (err) {
+    showAuthError(err.message);
+  }
+  btn.textContent = orig; btn.disabled = false;
+});
+
+document.getElementById('forgotResendBtn').addEventListener('click', () => {
+  document.getElementById('forgotStep1').style.display = 'block';
+  document.getElementById('forgotStep2').style.display = 'none';
+  document.querySelector('#forgotStep1 input[name="phone"]').value = prettyPhone(otpPhone);
+});
+
+document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!otpVerified) return showAuthError('Verify code first');
+  const newPin = document.querySelector('#forgotStep3 input[name="newPin"]').value;
+  const newPin2 = document.querySelector('#forgotStep3 input[name="newPin2"]').value;
+  if (!/^\d{4}$/.test(newPin)) return showAuthError('PIN must be 4 digits');
+  if (newPin !== newPin2) return showAuthError('PINs no match');
+
+  const otp = document.querySelector('#forgotStep2 input[name="otp"]').value;
+  const btn = e.target.querySelector('#forgotStep3 button[type="submit"]');
+  const orig = btn.textContent;
+  btn.textContent = 'Resetting...'; btn.disabled = true;
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ phone: otpPhone, code: otp, action: 'reset', newPin }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+
+    await doSignin({ phone: otpPhone, pin: newPin });
+    await loadTenants();
+    otpPhone = ''; otpVerified = false;
+    authDone();
+  } catch (err) {
+    showAuthError(err.message);
+    btn.textContent = orig; btn.disabled = false;
+  }
+});
+
+document.getElementById('authGuest').addEventListener('click', () => {
+  useCloud = false; currentAgent = null;
+  document.getElementById('authScreen').classList.add('hide');
+  document.getElementById('appHeader').style.display = 'flex';
+  document.getElementById('bottomNav').style.display = 'flex';
+  initMain();
+});
+
+// ===== ONLINE/OFFLINE =====
+window.addEventListener('online', () => {
+  isOnline = true;
+  toast('Back online — syncing...');
+  processQueue();
+  if (useCloud && currentAgent) loadTenants().then(() => render());
+});
+
+window.addEventListener('offline', () => {
+  isOnline = false;
+  syncStatus = 'offline';
+  updateSyncUI();
+  toast('Offline. Changes go sync later.');
+});
+
+// ===== INIT =====
+async function init() {
+  loadData();
+
+  // No supabase configured → straight to guest mode
+  if (!supabase) {
+    useCloud = false;
+    document.getElementById('authScreen').classList.add('hide');
+    document.getElementById('appHeader').style.display = 'flex';
+    document.getElementById('bottomNav').style.display = 'flex';
+    initMain();
+    return;
+  }
+
+  // Check session
+  const session = getSession();
+  if (session && session.id) {
+    currentAgent = session;
+    useCloud = true;
+    document.getElementById('authScreen').classList.add('hide');
+    document.getElementById('appHeader').style.display = 'flex';
+    document.getElementById('bottomNav').style.display = 'flex';
+    await loadTenants();
+    initMain();
+  } else {
+    showAuthScreen('signin');
+  }
+}
+
+function initMain() {
+  appInitialized = true;
+  render();
+
+  const settings = getReminderSettings();
+  if (settings.enabled === undefined) {
+    saveReminderSettings({ enabled: true, daysBefore: 14 });
+  }
+
+  checkReminders({ showSystem: false });
+  setInterval(() => checkReminders({ showSystem: true }), 5 * 60 * 1000);
+
+  if (useCloud && currentAgent) {
+    fetchBalance().then(() => {
+      if (state.currentView === 'settings' || state.currentView === 'home') render();
+    });
+    processQueue();
+  }
+}
+
+// Boot
+document.addEventListener('DOMContentLoaded', init);
+if (document.readyState !== 'loading') init();
+</script>
+
+</body>
+</html>
